@@ -51,7 +51,7 @@ data {
   array[N_S_obs] int<lower=1,upper=N> which_S_obs; // cases with non-missing spawner abundance obs
   vector<lower=0>[N] S_obs;            // observed annual total spawner abundance (not density)
   int<lower=1,upper=N> N_tau_S_obs;    // number of cases with known spawner observation error SD
-  array[N_S_obs] int<lower=1,upper=N> which_tau_S_obs; // cases with known spawner observation error SD
+  array[N_tau_S_obs] int<lower=1,upper=N> which_tau_S_obs; // cases with known spawner observation error SD
   vector<lower=0>[N] tau_S_obs;        // known spawner observation error SDs
   // spawner age structure and sex ratio
   int<lower=2> N_age;                  // number of adult age classes
