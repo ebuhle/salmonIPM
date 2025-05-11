@@ -106,7 +106,7 @@ stan_pars <- function(stan_model = c("IPM_SS_np","IPM_SSiter_np","IPM_SS_pp","IP
                 "beta_M","rho_M","sigma_year_M","sigma_M","mu_tau_M","sigma_tau_M",
                 "mu_MS","beta_MS","rho_MS","sigma_year_MS","sigma_MS",
                 "mu_p","sigma_pop_p","R_pop_p","sigma_p","R_p",
-                "mu_F","sigma_pop_F","sigma_F","P_D","mu_tau_S","sigma_tau_S"),
+                "mu_F","sigma_pop_F","sigma_F","p_D","mu_tau_S","sigma_tau_S"),
       group = c("psi","psi_W","psi_H","delta_psi","Mmax","Mmax_W","Mmax_H","delta_Mmax",
                 "eta_year_M","eta_year_MS","mu_pop_alr_p"),
       states = c("M","tau_M","s_MS","p","p_F","S","tau_S","q","q_F","q_O","p_HOS")

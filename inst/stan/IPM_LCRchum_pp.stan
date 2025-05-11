@@ -206,8 +206,8 @@ parameters {
   real<lower=0> sigma_F;                 // annual SD of logit proportion female
   vector[N] zeta_F;                      // logit proportion females by outmigration year (Z-scores)
   // origin composition, removals
-  array[N_H_pop] simplex[N_W_pop] P_D;   // P(dispersal from hatchery h to wild pop j) 
-  vector<lower=0,upper=1>[N_B] B_rate;   // true broodstock take rate when B_take > 0
+  array[N_H_pop] simplex[N_W_pop] p_D;   // P(dispersal from known origin o to wild pop j) 
+  vector<lower=0,upper=1>[N_B] b;        // true broodstock take rate when B_take > 0
   // initial states and observation error
   vector<lower=0>[smolt_age*N_pop] M_init; // true smolt abundance in years 1:smolt_age
   vector<lower=0>[max_ocean_age*N_pop] S_init; // true total spawner abundance in years 1:max_ocean_age
@@ -250,11 +250,11 @@ transformed parameters {
   vector<lower=0>[N] S_W = rep_vector(0,N); // true total wild spawner abundance
   vector<lower=0>[N] S_H = rep_vector(0,N); // true total hatchery-origin spawner abundance
   vector<lower=0>[N] S = rep_vector(0,N);   // true total spawner abundance
-  array[N_pop] vector[N_W_pop] P_D_all;     // dispersal matrix padded with zeros 
+  array[N_pop] vector[N_W_pop] P_D;      // dispersal matrix padded with zeros 
   array[N_year] matrix[N_pop,N_pop] S_O = 
     rep_array(rep_matrix(0,N_pop,N_pop), N_year); // true spawners by origin and return location
   matrix[N,1+N_H_pop] q_O = rep_matrix(1,N,1+N_H_pop); // true origin distns (col 1: unknown / natural)
-  vector<lower=0,upper=1>[N] B_rate_all; // broodstock take rate in all years
+  vector<lower=0,upper=1>[N] b_all;      // broodstock take rate in all years
   // spawner age structure
   row_vector[N_age-1] mu_alr_p;          // mean of log-ratio cohort age distributions
   matrix[N_pop,N_age-1] mu_pop_alr_p;    // population mean log-ratio age distributions
@@ -267,9 +267,9 @@ transformed parameters {
   vector<lower=0>[N] tau_M;              // smolt observation error SDs
   vector<lower=0>[N] tau_S;              // spawner observation error SDs
 
-  // Pad B_rate
-  B_rate_all = rep_vector(0,N);
-  B_rate_all[which_B] = B_rate;
+  // Pad b
+  b_all = rep_vector(0,N);
+  b_all[which_B] = b;
   
   // Matt trick for population-specific egg-smolt survival and capacity (uncorrelated)
   {
@@ -334,8 +334,8 @@ transformed parameters {
   p_F = inv_logit(logit(mu_F) + sigma_pop_F*zeta_pop_F[pop] + sigma_F*zeta_F);
   
   // Pad straying matrix
-  P_D_all = rep_array(rep_vector(0, N_W_pop), N_pop);
-  P_D_all[which_H_pop] = P_D;
+  P_D = rep_array(rep_vector(0, N_W_pop), N_pop);
+  P_D[which_H_pop] = p_D;
 
   // Calculate true hatchery spawners by origin and return location in return year i
   // so they are available for the wild pop loop 
@@ -350,13 +350,13 @@ transformed parameters {
       if(pop_year[i] <= max_ocean_age)  // use initial values
       {
         int ii = (pop[i] - 1)*max_ocean_age + pop_year[i]; // index into S_init
-        S_O[year[i]][which_W_pop,pop[i]] = S_init[ii]*P_D_all[pop[i]];
+        S_O[year[i]][which_W_pop,pop[i]] = S_init[ii]*P_D[pop[i]];
       }
       else // use hatchery smolt-to-adult process model 
       {
         for(a in 1:N_age)
           S_H_a[a] = M_obs[i-ocean_ages[a]] * s_MS[i-ocean_ages[a]] * p[i-ocean_ages[a],a];
-        S_O[year[i]][which_W_pop,pop[i]] = S_H_a * (1 - age_F*F_rate[i]) * P_D_all[pop[i]];
+        S_O[year[i]][which_W_pop,pop[i]] = S_H_a * (1 - age_F*F_rate[i]) * P_D[pop[i]];
       }
     }
   }
@@ -400,7 +400,7 @@ transformed parameters {
         else // use recruitment process model 
         {
           S_W_a[a] = M[i-ocean_ages[a]] * s_MS[i-ocean_ages[a]] * p[i-ocean_ages[a],a] *
-                     (1 - age_F[a]*F_rate[i]) * (1 - age_B[a]*B_rate_all[i]);
+                     (1 - age_F[a]*F_rate[i]) * (1 - age_B[a]*b_all[i]);
           q_F_a[a] = p_F[i-ocean_ages[a]];
         }
       }
@@ -505,8 +505,8 @@ model {
   q_F_init ~ beta(3,3);        // mildly regularize initial states toward 0.5
 
   // removals
-  log_B_take = log(S_W[which_B]) + log(q[which_B,]*age_B) + logit(B_rate); 
-  // implies B_take[i] = S_W[i] * (q[i,] * ageB) * B_rate[i] / (1 - B_rate[i])
+  log_B_take = log(S_W[which_B]) + log(q[which_B,]*age_B) + logit(b); 
+  // implies B_take[i] = S_W[i] * (q[i,] * ageB) * b[i] / (1 - b[i])
   B_take_obs ~ lognormal(log_B_take, 0.05); // penalty to force pred and obs broodstock to match 
 
   // initial states

@@ -62,8 +62,8 @@ stan_init <- function(stan_model = c("IPM_SS_np","IPM_SSiter_np","IPM_SS_pp","IP
     which_H <- which(n_H_obs > 0)
     n_H_obs <- n_H_obs[which_H]
     n_W_obs <- n_O_obs[which_H,1]
-    P_D <- aggregate(pmax(n_Oknown_obs, 0.1), list(pop = pop), sum)[-which_H_pop,-1]
-    P_D <- t(sweep(P_D, 2, colSums(P_D), "/"))
+    p_D <- aggregate(pmax(n_Oknown_obs, 0.1), list(pop = pop), sum)[-which_H_pop,-1]
+    p_D <- t(sweep(p_D, 2, colSums(p_D), "/"))
   }
   
   ## Crude estimates of states 
@@ -431,8 +431,8 @@ stan_init <- function(stan_model = c("IPM_SS_np","IPM_SSiter_np","IPM_SS_pp","IP
         sigma_F = runif(1, 0.1, 0.5),
         zeta_F = rnorm(N, 0, 0.3),
         # origin composition, removals
-        P_D = P_D,
-        B_rate = B_rate,
+        p_D = p_D,
+        b = B_rate,
         # initial states, observation error
         M_init = rep(tapply(M_obs, pop, median), each = smolt_age),
         S_init = rep(tapply(S_obs_noNA, pop, median), each = max_age - smolt_age),
