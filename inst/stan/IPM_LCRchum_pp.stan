@@ -70,8 +70,8 @@ data {
   vector<lower=0,upper=1>[N_age] age_F; // is age a (non)selected (0/1) by fishery?
   int<lower=0> N_H_pop;                 // number of hatchery pops
   array[N_H_pop] int<lower=1,upper=max(pop)> which_H_pop; // hatchery pop IDs
-  int<lower=0,upper=N> N_B;             // number of years with B_take > 0
-  array[N_B] int<lower=1,upper=N> which_B; // years with B_take > 0
+  int<lower=0,upper=N> N_B;             // number of cases with B_take > 0
+  array[N_B] int<lower=1,upper=N> which_B; // cases with B_take > 0
   vector[N_B] B_take_obs;               // observed broodstock take of wild adults
   vector<lower=0,upper=1>[N_age] age_B; // is age a (non)selected (0/1) in broodstock?
   array[max(year)] matrix<lower=0,upper=1>[max(pop),max(pop)] P_B_obs; // conditional broodstock transfer matrices
@@ -257,7 +257,7 @@ transformed parameters {
   array[N_year] matrix[N_pop,N_pop] S_O = 
     rep_array(rep_matrix(0,N_pop,N_pop), N_year); // true spawners by origin and return location
   matrix[N,1+N_H_pop] q_O = rep_matrix(1,N,1+N_H_pop); // true origin distns (col 1: unknown / natural)
-  vector<lower=0,upper=1>[N] b_all;      // broodstock take rate in all years
+  matrix<lower=0,upper=1>[N_year,N_pop] b_all; // broodstock removal rate in all years and pops
   // spawner age structure
   row_vector[N_age-1] mu_alr_p;          // mean of log-ratio cohort age distributions
   matrix[N_pop,N_age-1] mu_pop_alr_p;    // population mean log-ratio age distributions
@@ -270,10 +270,10 @@ transformed parameters {
   vector<lower=0>[N] tau_M;              // smolt observation error SDs
   vector<lower=0>[N] tau_S;              // spawner observation error SDs
 
-  // Pad b
-  b_all = rep_vector(0,N);
-  b_all[which_B] = b;
-  
+  // Pad broodstock removal rate array
+  b_all = rep_matrix(0, N_year, N_pop);
+  for(i in which_B) b_all[year[i],pop[i]] = b[i];
+
   // Matt trick for population-specific egg-smolt survival and capacity (uncorrelated)
   {
     vector[N] Xbeta_psi = mat_lmult(X_psi, beta_psi);          // covariate effects on psi 
