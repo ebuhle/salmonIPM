@@ -82,7 +82,7 @@ transformed data {
   int<lower=1,upper=N> N_pop = max(pop);   // number of populations
   int<lower=1,upper=N> N_year = max(year); // number of years
   array[N] int<lower=1> pop_year;          // index of years within each pop, starting at 1
-  int<lower=0,upper=N_pop> N_W_pop = N_pop - N_H_pop;  // number of natural (wild) pops
+  int<lower=0,upper=N_pop> N_D_pop = N_pop - N_O_pop;  // number of unknown-origin (wild) pops
   array[N_D_pop] int<lower=1,upper=N_pop> which_D_pop; // unknown-origin pop IDs (complement of which_O_pop) 
   vector<lower=0,upper=1>[N] indx_H;       // is case from a hatchery (1) or wild (0) pop?
   array[N_age] int<lower=0> ocean_ages;    // ocean ages
@@ -209,7 +209,7 @@ parameters {
   real<lower=0> sigma_F;                 // annual SD of logit proportion female
   vector[N] zeta_F;                      // logit proportion females by outmigration year (Z-scores)
   // origin composition, removals
-  array[N_H_pop] simplex[N_W_pop] p_D;   // P(dispersal from known origin o to wild pop j) 
+  array[N_O_pop] simplex[N_D_pop] p_D;   // P(dispersal from known origin o to wild pop j) 
   vector<lower=0,upper=1>[N_B] b;        // true broodstock take rate when B_take > 0
   // initial states and observation error
   vector<lower=0>[smolt_age*N_pop] M_init; // true smolt abundance in years 1:smolt_age
@@ -253,7 +253,7 @@ transformed parameters {
   vector<lower=0>[N] S_W = rep_vector(0,N); // true total wild spawner abundance
   vector<lower=0>[N] S_H = rep_vector(0,N); // true total hatchery-origin spawner abundance
   vector<lower=0>[N] S = rep_vector(0,N);   // true total spawner abundance
-  array[N_pop] vector[N_W_pop] P_D;      // dispersal matrix padded with zeros 
+  matrix[N_pop,N_pop] P_D;               // dispersal matrix padded with zeros 
   array[N_year] matrix[N_pop,N_pop] S_O = 
     rep_array(rep_matrix(0,N_pop,N_pop), N_year); // true spawners by origin and return location
   matrix[N,1+N_H_pop] q_O = rep_matrix(1,N,1+N_H_pop); // true origin distns (col 1: unknown / natural)
@@ -337,8 +337,9 @@ transformed parameters {
   p_F = inv_logit(logit(mu_F) + sigma_pop_F*zeta_pop_F[pop] + sigma_F*zeta_F);
   
   // Pad straying matrix
-  P_D = rep_array(rep_vector(0, N_W_pop), N_pop);
-  P_D[which_H_pop] = p_D;
+  P_D = rep_matrix(0, N_pop, N_pop);
+  for(k in which_O_pop) P_D[,k] = p_D[k];
+  for(k in which_D_pop) P_D[k,k] = 1;
 
   // Calculate true hatchery spawners by origin and return location in return year i
   // so they are available for the wild pop loop 
