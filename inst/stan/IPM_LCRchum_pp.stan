@@ -62,17 +62,20 @@ data {
   array[N] int<lower=0> n_F_obs;       // observed count of female spawners
   vector<lower=0,upper=1>[N] p_G_obs;  // proportion green (fully fecund) females
   // origin composition
-  int<lower=0> N_H_pop;                // number of hatchery pops
-  array[N_H_pop] int<lower=1,upper=max(pop)> which_H_pop; // hatchery pop IDs
-  matrix<lower=0>[N,1+N_H_pop] n_O_obs; // observed spawner origin frequencies (1st col is NOR)
+  int<lower=0> N_O_pop;                 // number of known-origin pops
+  array[N_O_pop] int<lower=1,upper=max(pop)> which_O_pop; // known-origin pop IDs
+  matrix<lower=0>[N,1+N_O_pop] n_O_obs; // observed spawner origin frequencies (1st col is NOR)
   // fishery and hatchery removals and translocations
-  vector[N] F_rate;                    // fishing mortality rate of wild adults
+  vector[N] F_rate;                     // fishing mortality rate of wild adults
   vector<lower=0,upper=1>[N_age] age_F; // is age a (non)selected (0/1) by fishery?
-  int<lower=0,upper=N> N_B;            // number of years with B_take > 0
+  int<lower=0> N_H_pop;                 // number of hatchery pops
+  array[N_H_pop] int<lower=1,upper=max(pop)> which_H_pop; // hatchery pop IDs
+  int<lower=0,upper=N> N_B;             // number of years with B_take > 0
   array[N_B] int<lower=1,upper=N> which_B; // years with B_take > 0
-  vector[N_B] B_take_obs;              // observed broodstock take of wild adults
+  vector[N_B] B_take_obs;               // observed broodstock take of wild adults
   vector<lower=0,upper=1>[N_age] age_B; // is age a (non)selected (0/1) in broodstock?
-  vector<lower=0>[N] S_add_obs;        // number of translocated spawners added to population
+  array[max(year)] matrix<lower=0,upper=1>[max(pop),max(pop)] P_B_obs; // broodstock transfer matrices
+  vector<lower=0>[N] S_add_obs;         // number of translocated spawners added to population
 }
 
 transformed data {
