@@ -74,7 +74,7 @@ data {
   array[N_B] int<lower=1,upper=N> which_B; // years with B_take > 0
   vector[N_B] B_take_obs;               // observed broodstock take of wild adults
   vector<lower=0,upper=1>[N_age] age_B; // is age a (non)selected (0/1) in broodstock?
-  array[max(year)] matrix<lower=0,upper=1>[max(pop),max(pop)] P_B_obs; // broodstock transfer matrices
+  array[max(year)] matrix<lower=0,upper=1>[max(pop),max(pop)] P_B_obs; // conditional broodstock transfer matrices
   vector<lower=0>[N] S_add_obs;         // number of translocated spawners added to population
 }
 
@@ -83,7 +83,7 @@ transformed data {
   int<lower=1,upper=N> N_year = max(year); // number of years
   array[N] int<lower=1> pop_year;          // index of years within each pop, starting at 1
   int<lower=0,upper=N_pop> N_W_pop = N_pop - N_H_pop;  // number of natural (wild) pops
-  array[N_W_pop] int<lower=1,upper=N_pop> which_W_pop; // wild pop IDs
+  array[N_D_pop] int<lower=1,upper=N_pop> which_D_pop; // unknown-origin pop IDs (complement of which_O_pop) 
   vector<lower=0,upper=1>[N] indx_H;       // is case from a hatchery (1) or wild (0) pop?
   array[N_age] int<lower=0> ocean_ages;    // ocean ages
   vector[N_age] ones_N_age = rep_vector(1,N_age); // for rowsums of p matrix 
@@ -112,9 +112,9 @@ transformed data {
     int jj = 1;
     for(j in 1:N_pop) 
     {
-      if(max(veq(which_H_pop, j)) == 0)
+      if(max(veq(which_O_pop, j)) == 0)
       {
-        which_W_pop[jj] = j;
+        which_D_pop[jj] = j;
         jj = jj + 1;
       }
     }
