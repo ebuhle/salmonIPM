@@ -74,8 +74,8 @@ data {
   array[N_B] int<lower=1,upper=N> which_B; // cases with B_take > 0
   vector[N_B] B_take_obs;               // observed broodstock take of wild adults
   vector<lower=0,upper=1>[N_age] age_B; // is age a (non)selected (0/1) in broodstock?
-  array[max(year)] matrix<lower=0,upper=1>[max(pop),max(pop)] P_B_obs; // conditional broodstock transfer matrices
-  vector<lower=0>[N] S_add_obs;         // number of translocated spawners added to population
+  array[max(year)] matrix<lower=0,upper=1>[max(pop),max(pop)] P_B; // conditional broodstock transfer matrices
+  // vector<lower=0>[N] S_add_obs;         // number of translocated spawners added to population
 }
 
 transformed data {
@@ -253,11 +253,13 @@ transformed parameters {
   vector<lower=0>[N] S_W = rep_vector(0,N); // true total wild spawner abundance
   vector<lower=0>[N] S_H = rep_vector(0,N); // true total hatchery-origin spawner abundance
   vector<lower=0>[N] S = rep_vector(0,N);   // true total spawner abundance
-  matrix[N_pop,N_pop] P_D;               // dispersal matrix padded with zeros 
+  matrix[N_pop,N_pop] P_D = rep_matrix(0, N_pop, N_pop); // dispersal matrix padded with zeros 
   array[N_year] matrix[N_pop,N_pop] S_O = 
     rep_array(rep_matrix(0,N_pop,N_pop), N_year); // true spawners by origin and return location
   matrix[N,1+N_H_pop] q_O = rep_matrix(1,N,1+N_H_pop); // true origin distns (col 1: unknown / natural)
-  matrix<lower=0,upper=1>[N_year,N_pop] b_all; // broodstock removal rate in all years and pops
+  matrix<lower=0,upper=1>[N_pop,N_year] b_all = 
+    rep_matrix(0, N_pop, N_year);        // broodstock removal rate in all years and pops
+  array[N_year] matrix[N_pop,N_pop] P_T; // unconditional translocation probability matrices
   // spawner age structure
   row_vector[N_age-1] mu_alr_p;          // mean of log-ratio cohort age distributions
   matrix[N_pop,N_age-1] mu_pop_alr_p;    // population mean log-ratio age distributions
@@ -269,10 +271,6 @@ transformed parameters {
   // observation error SDs
   vector<lower=0>[N] tau_M;              // smolt observation error SDs
   vector<lower=0>[N] tau_S;              // spawner observation error SDs
-
-  // Pad broodstock removal rate array
-  b_all = rep_matrix(0, N_year, N_pop);
-  for(i in which_B) b_all[year[i],pop[i]] = b[i];
 
   // Matt trick for population-specific egg-smolt survival and capacity (uncorrelated)
   {
@@ -336,10 +334,16 @@ transformed parameters {
   // Annual population-specific proportion females
   p_F = inv_logit(logit(mu_F) + sigma_pop_F*zeta_pop_F[pop] + sigma_F*zeta_F);
   
+  // Pad broodstock removal rate matrix
+  for(i in 1:N_B) b_all[pop[which_B[i]],year[which_B[i]]] = b[i];
+
   // Pad straying matrix
-  P_D = rep_matrix(0, N_pop, N_pop);
   for(k in which_O_pop) P_D[,k] = p_D[k];
   for(k in which_D_pop) P_D[k,k] = 1;
+  
+  // Annual unconditional broodstock transfer probabilities
+  for(t in 1:N_year)
+    P_T[t] = diag_post_multiply(P_B[t], b_all[,t]) + diag_matrix(1 - b_all[,t]);
 
   // Calculate true hatchery spawners by origin and return location in return year i
   // so they are available for the wild pop loop 
