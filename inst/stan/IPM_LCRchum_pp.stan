@@ -250,16 +250,20 @@ transformed parameters {
   vector[N_year] eta_year_MS;            // annual logit SAR anomalies
   vector<lower=0,upper=1>[N] s_MS;       // true SAR
   // H/W spawner abundance, removals
-  vector<lower=0>[N] S_W = rep_vector(0,N); // true total wild spawner abundance
-  vector<lower=0>[N] S_H = rep_vector(0,N); // true total hatchery-origin spawner abundance
-  vector<lower=0>[N] S = rep_vector(0,N);   // true total spawner abundance
-  matrix[N_pop,N_pop] P_D = rep_matrix(0, N_pop, N_pop); // dispersal matrix padded with zeros 
+  matrix[N_pop,N_pop] P_D = rep_matrix(0,N_pop,N_pop); // dispersal matrix padded with zeros 
+  matrix<lower=0,upper=1>[N_pop,N_year] b_all = 
+    rep_matrix(0,N_pop,N_year);          // broodstock removal rate in all years and pops
+  array[N_year] matrix[N_pop,N_pop] P_T; // unconditional translocation probability matrices
+  array[N_year] matrix[N_pop,N_age] S_a = 
+    rep_array(rep_matrix(0,N_pop,N_age), N_year); // true spawners by pop and age
+  array[N_year] matrix[N_pop,2] S_MF = 
+    rep_array(rep_matrix(0,N_pop,2), N_year);     // true spawners by pop and sex
   array[N_year] matrix[N_pop,N_pop] S_O = 
     rep_array(rep_matrix(0,N_pop,N_pop), N_year); // true spawners by origin and return location
   matrix[N,1+N_H_pop] q_O = rep_matrix(1,N,1+N_H_pop); // true origin distns (col 1: unknown / natural)
-  matrix<lower=0,upper=1>[N_pop,N_year] b_all = 
-    rep_matrix(0, N_pop, N_year);        // broodstock removal rate in all years and pops
-  array[N_year] matrix[N_pop,N_pop] P_T; // unconditional translocation probability matrices
+  vector<lower=0>[N] S_W = rep_vector(0,N); // true total wild spawner abundance
+  vector<lower=0>[N] S_H = rep_vector(0,N); // true total hatchery-origin spawner abundance
+  vector<lower=0>[N] S = rep_vector(0,N);   // true total spawner abundance
   // spawner age structure
   row_vector[N_age-1] mu_alr_p;          // mean of log-ratio cohort age distributions
   matrix[N_pop,N_age-1] mu_pop_alr_p;    // population mean log-ratio age distributions
