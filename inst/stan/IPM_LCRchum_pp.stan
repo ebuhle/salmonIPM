@@ -395,12 +395,12 @@ transformed parameters {
     else
       M[i] = M0[i-smolt_age];  // smolts from appropriate brood year
     
-    // Adult recruitment, age structure, dispersal and translocation
+    // Adult recruitment, dispersal and translocation
     for(a in 1:N_age)
     {
-      real R_a;          // age-a adult recruits
-      real q_F_a;        // proportion of age-a recruits that are female
-      vector[N_pop] S_a; // age-a spawners by pop after dispersal and translocations
+      real R_a;           // age-a adult recruits
+      real q_F_a;         // proportion of age-a recruits that are female
+      vector[N_pop] S_ai; // age-a spawners from pop i by disposition after dispersal and translocations
 
       // recruitment
       if(pop_year[i] <= ocean_ages[a]) // use initial values
@@ -415,10 +415,10 @@ transformed parameters {
         q_F_a = p_F[i-ocean_ages[a]];
       }
       
-      S_a = P_T[year[i]] * P_D[,pop[i]] * R_a;   // dispersal and translocation
-      S_O[year[i]][,pop[i]] += S_a;              // spawners by origin
-      S_a[year[i]][,a] += S_a;                   // spawners by age
-      S_MF[year[i]] += S_a * [1 - q_F_a, q_F_a]; // spawners by sex
+      S_ai = P_T[year[i]] * P_D[,pop[i]] * R_a;   // dispersal and translocation
+      S_O[year[i]][,pop[i]] += S_ai;              // increment spawners by origin
+      S_a[year[i]][,a] += S_ai;                   // increment spawners by age
+      S_MF[year[i]] += S_ai * [1 - q_F_a, q_F_a]; // increment spawners by sex
     }
   }
   
