@@ -75,7 +75,6 @@ data {
   vector[N_B] B_take_obs;               // observed broodstock take of wild adults
   vector<lower=0,upper=1>[N_age] age_B; // is age a (non)selected (0/1) in broodstock?
   array[max(year)] matrix<lower=0,upper=1>[max(pop),max(pop)] P_B; // conditional broodstock transfer matrices
-  // vector<lower=0>[N] S_add_obs;         // number of translocated spawners added to population
 }
 
 transformed data {
@@ -249,22 +248,22 @@ transformed parameters {
   // SAR
   vector[N_year] eta_year_MS;            // annual logit SAR anomalies
   vector<lower=0,upper=1>[N] s_MS;       // true SAR
-  // H/W spawner abundance, removals
+  // dispersal and translocation
   matrix[N_pop,N_pop] P_D = rep_matrix(0,N_pop,N_pop); // dispersal matrix padded with zeros 
   matrix<lower=0,upper=1>[N_pop,N_year] b_all = 
     rep_matrix(0,N_pop,N_year);          // broodstock removal rate in all years and pops
   array[N_year] matrix[N_pop,N_pop] P_T; // unconditional translocation probability matrices
+  // spawner abundance by age, sex and origin
   array[N_year] matrix[N_pop,N_age] S_a = 
     rep_array(rep_matrix(0,N_pop,N_age), N_year); // true spawners by pop and age
   array[N_year] matrix[N_pop,2] S_MF = 
     rep_array(rep_matrix(0,N_pop,2), N_year);     // true spawners by pop and sex
   array[N_year] matrix[N_pop,N_pop] S_O = 
     rep_array(rep_matrix(0,N_pop,N_pop), N_year); // true spawners by origin and return location
-  matrix[N,1+N_O_pop] q_O = rep_matrix(1,N,1+N_O_pop); // true origin distns (col 1: unknown / natural)
   vector<lower=0>[N] S_W = rep_vector(0,N); // true total wild spawner abundance
   vector<lower=0>[N] S_H = rep_vector(0,N); // true total hatchery-origin spawner abundance
   vector<lower=0>[N] S = rep_vector(0,N);   // true total spawner abundance
-  // spawner age structure
+  // spawner age composition
   row_vector[N_age-1] mu_alr_p;          // mean of log-ratio cohort age distributions
   matrix[N_pop,N_age-1] mu_pop_alr_p;    // population mean log-ratio age distributions
   matrix<lower=0,upper=1>[N,N_age] p;    // true adult age distributions by outmigration year
@@ -272,6 +271,8 @@ transformed parameters {
   // spawner sex ratio
   vector<lower=0,upper=1>[N] p_F;        // proportion females by outmigration year
   vector<lower=0,upper=1>[N] q_F = rep_vector(0,N); // proportion females by return year
+  // spawner origin composition
+  matrix[N,1+N_O_pop] q_O = rep_matrix(1,N,1+N_O_pop); // true origin distns (col 1: unknown / natural)
   // observation error SDs
   vector<lower=0>[N] tau_M;              // smolt observation error SDs
   vector<lower=0>[N] tau_S;              // spawner observation error SDs
@@ -349,7 +350,7 @@ transformed parameters {
   for(t in 1:N_year)
     P_T[t] = diag_post_multiply(P_B[t], b_all[,t]) + diag_matrix(1 - b_all[,t]);
 
-  // Recruitment, dispersal and translocation
+  // Smolt and adult recruitment, dispersal and translocation
   for(i in 1:N)
   {
     int ii;                        // index into S_init and q_init
@@ -376,7 +377,7 @@ transformed parameters {
     {
       real R_a;           // age-a adult recruits
       real q_F_a;         // proportion of age-a recruits that are female
-      vector[N_pop] S_ai; // age-a spawners from pop i by disposition after dispersal and translocations
+      vector[N_pop] S_ai; // age-a spawners from pop i by disposition
 
       // recruitment
       if(pop_year[i] <= ocean_ages[a]) // use initial values
@@ -398,94 +399,44 @@ transformed parameters {
     }
   }
   
-  // Spawner abundance including strays and translocations
-  // Age, sex and origin composition
+  // Spawner abundance and composition
+  // Smolt production
   for(i in 1:N)
   {
+    // Wild and hatchery spawner abundance including strays and translocations
     S[i] = sum(S_a[year[i]][pop[i],]);
+    S_H[i] = sum(S_O[year[i]][pop[i],which_H_pop]);
+    S_W[i] = S[i] - S_H[i];
+
+    // Age, sex and origin composition
     q[i,] = S_a[year[i]][pop[i],] / S[i];
     q_F[i] = S_MF[year[i]][pop[i],2] / S[i];
-    q_O[i,] = append_col(sum(S_O[year[i]][,which_D_pop]), 
-                         S_O[year[i][,which_O_pop]]) / S[i];
+    q_O[i,] = append_col(sum(S_O[year[i]][pop[i],which_D_pop]), 
+                         S_O[year[i][pop[i],which_O_pop]]) / S[i];
+
+    // Expected egg production from brood year
+    // weighted by age structure and sex ratio
+    // discounted for proportion of non-green (not fully fecund) females
+    {
+      // weighted per capita fecundity
+      real wt_E = q[i,] * mu_E * q_F[i] * (p_G_obs[i] + delta_NG * p_NG_obs[i]);
+      
+      if(any_RRS) {
+        E_hat_W[i] = wt_E*S_W[i];
+        E_hat_H[i] = wt_E*S_H[i];
+      } else {
+        E_hat[i] = wt_E*S[i];
+      }
+    }
+    
+    // Smolt production from brood year
+    // Use density-independent SR function for hatcheries
+    M_hat[i] = SR(indx_H[i] ? 1 : SR_fun, RRS, 
+                  psi_Xbeta[i], psi_W_Xbeta[i], psi_H_Xbeta[i],
+                  Mmax_Xbeta[i], Mmax_W_Xbeta[i], Mmax_H_Xbeta[i],
+                  E_hat[i], E_hat_W[i], E_hat_H[i], A[i]);
+    M0[i] = M_hat[i] * exp(eta_year_M[year[i]] + dot_product(X_M[i], beta_M) + sigma_M*zeta_M[i]);
   }
-  
-  // // Calculate true total wild and hatchery spawners, spawner age distribution, 
-  // // eggs and smolts, and predict smolt recruitment from brood year i
-  // for(i in 1:N)
-  // {
-  //   // This loop is only for wild populations
-  //   if(!indx_H[i])
-  //   {
-  //     int ii;                        // index into S_init and q_init
-  //     // number of orphan age classes <lower=0,upper=N_age>
-  //     int N_orphan_age = max(N_age - to_int(fdim(pop_year[i], min_ocean_age)), N_age); 
-  //     vector[N_orphan_age] q_orphan; // orphan age distribution
-  //     row_vector[N_age] S_W_a;       // wild spawners by age
-  //     vector[N_age] q_F_a;           // proportion of each age that are female
-  //     
-  //     // Smolt recruitment
-  //     if(pop_year[i] <= smolt_age)
-  //       M[i] = M_init[(pop[i]-1)*smolt_age + pop_year[i]];  // use initial values
-  //     else
-  //       M[i] = M0[i-smolt_age];  // smolts from appropriate brood year
-  //     
-  //     // Spawners and age structure
-  //     // Use initial values for orphan age classes, otherwise use process model
-  //     if(pop_year[i] <= max_ocean_age)
-  //     {
-  //       ii = (pop[i] - 1)*max_ocean_age + pop_year[i];
-  //       q_orphan = append_row(sum(head(q_init[ii], N_age - N_orphan_age + 1)), 
-  //                             tail(q_init[ii], N_orphan_age - 1));
-  //     }
-  //     
-  //     for(a in 1:N_age)
-  //     {
-  //       if(pop_year[i] <= ocean_ages[a]) // use initial values
-  //       {
-  //         S_W_a[a] = S_init[ii]*q_orphan[a - (N_age - N_orphan_age)];
-  //         q_F_a[a] = q_F_init[ii];
-  //       }
-  //       else // use recruitment process model 
-  //       {
-  //         S_W_a[a] = M[i-ocean_ages[a]] * s_MS[i-ocean_ages[a]] * p[i-ocean_ages[a],a] *
-  //                    (1 - age_F[a]*F_rate[i]) * (1 - age_B[a]*b_all[i]);
-  //         q_F_a[a] = p_F[i-ocean_ages[a]];
-  //       }
-  //     }
-  //     
-  //     // Total spawners including translocations and strays
-  //     // age and sex structure
-  //     S_W[i] = sum(S_W_a);
-  //     q[i,] = S_W_a/S_W[i];
-  //     q_F[i] = q[i,]*q_F_a;
-  //     S_H[i] = sum(S_O[year[i]][pop[i],which_H_pop]);
-  //     S[i] = S_W[i] + S_H[i] + S_add_obs[i];
-  //     q_O[i,1] = S_W[i] + S_add_obs[i];             // unknown natural origin
-  //     q_O[i,2:] = S_O[year[i]][pop[i],which_H_pop]; // known (hatchery) origin
-  //     q_O[i,] = q_O[i,]/sum(q_O[i,]);
-  // 
-  //     // Expected egg production from brood year i
-  //     // weighted by age structure and sex ratio 
-  //     // discounted for proportion of non-green (not fully fecund) females
-  //     {
-  //       // weighted per capita fecundity
-  //       real wt_E = q[i,] * mu_E * q_F[i] * (p_G_obs[i] + delta_NG * p_NG_obs[i]);
-  //       
-  //       if(any_RRS) {
-  //         E_hat_W[i] = wt_E * S_W[i];
-  //         E_hat_H[i] = wt_E * S_H[i];
-  //       } else {
-  //         E_hat[i] = wt_E * S[i];
-  //       }
-  //     }
-  //     
-  //     // Smolt production from brood year i
-  //     M_hat[i] = SR(SR_fun, RRS, psi_Xbeta[i], psi_W_Xbeta[i], psi_H_Xbeta[i],
-  //                   Mmax_Xbeta[i], Mmax_W_Xbeta[i], Mmax_H_Xbeta[i], 
-  //                   E_hat[i], E_hat_W[i], E_hat_H[i], A[i]);
-  //     M0[i] = M_hat[i] * exp(eta_year_M[year[i]] + dot_product(X_M[i], beta_M) + sigma_M*zeta_M[i]);
-  //   }
-  // }
   
   // Impute missing observation error SDs from lognormal hyperdistribution
   // (use Matt trick)
