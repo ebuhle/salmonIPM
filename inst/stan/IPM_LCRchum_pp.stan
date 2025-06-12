@@ -260,7 +260,7 @@ transformed parameters {
     rep_array(rep_matrix(0,N_pop,2), N_year);     // true spawners by pop and sex
   array[N_year] matrix[N_pop,N_pop] S_O = 
     rep_array(rep_matrix(0,N_pop,N_pop), N_year); // true spawners by origin and return location
-  matrix[N,1+N_H_pop] q_O = rep_matrix(1,N,1+N_H_pop); // true origin distns (col 1: unknown / natural)
+  matrix[N,1+N_O_pop] q_O = rep_matrix(1,N,1+N_O_pop); // true origin distns (col 1: unknown / natural)
   vector<lower=0>[N] S_W = rep_vector(0,N); // true total wild spawner abundance
   vector<lower=0>[N] S_H = rep_vector(0,N); // true total hatchery-origin spawner abundance
   vector<lower=0>[N] S = rep_vector(0,N);   // true total spawner abundance
@@ -349,30 +349,6 @@ transformed parameters {
   for(t in 1:N_year)
     P_T[t] = diag_post_multiply(P_B[t], b_all[,t]) + diag_matrix(1 - b_all[,t]);
 
-  // // Calculate true hatchery spawners by origin and return location in return year i
-  // // so they are available for the wild pop loop 
-  // for(i in 1:N)
-  // {
-  //   // This loop is only for hatchery populations
-  //   if(indx_H[i])
-  //   {
-  //     row_vector[N_age] S_H_a;  // hatchery spawners by age
-  //     
-  //     //// NOTE: should use orphan formulation 
-  //     if(pop_year[i] <= max_ocean_age)  // use initial values
-  //     {
-  //       int ii = (pop[i] - 1)*max_ocean_age + pop_year[i]; // index into S_init
-  //       S_O[year[i]][which_W_pop,pop[i]] = S_init[ii]*P_D[pop[i]];
-  //     }
-  //     else // use hatchery smolt-to-adult process model 
-  //     {
-  //       for(a in 1:N_age)
-  //         S_H_a[a] = M_obs[i-ocean_ages[a]] * s_MS[i-ocean_ages[a]] * p[i-ocean_ages[a],a];
-  //       S_O[year[i]][which_W_pop,pop[i]] = S_H_a * (1 - age_F*F_rate[i]) * P_D[pop[i]];
-  //     }
-  //   }
-  // }
-
   // Recruitment, dispersal and translocation
   for(i in 1:N)
   {
@@ -420,6 +396,17 @@ transformed parameters {
       S_a[year[i]][,a] += S_ai;                   // increment spawners by age
       S_MF[year[i]] += S_ai * [1 - q_F_a, q_F_a]; // increment spawners by sex
     }
+  }
+  
+  // Spawner abundance including strays and translocations
+  // Age, sex and origin composition
+  for(i in 1:N)
+  {
+    S[i] = sum(S_a[year[i]][pop[i],]);
+    q[i,] = S_a[year[i]][pop[i],] / S[i];
+    q_F[i] = S_MF[year[i]][pop[i],2] / S[i];
+    q_O[i,] = append_col(sum(S_O[year[i]][,which_D_pop]), 
+                         S_O[year[i][,which_O_pop]]) / S[i];
   }
   
   // // Calculate true total wild and hatchery spawners, spawner age distribution, 
