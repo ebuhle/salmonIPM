@@ -83,7 +83,7 @@ transformed data {
   array[N] int<lower=1> pop_year;          // index of years within each pop, starting at 1
   int<lower=0,upper=N_pop> N_D_pop = N_pop - N_O_pop;  // number of unknown-origin (wild) pops
   array[N_D_pop] int<lower=1,upper=N_pop> which_D_pop; // unknown-origin pop IDs (complement of which_O_pop) 
-  vector<lower=0,upper=1>[N] indx_H;       // is case from a hatchery (1) or wild (0) pop?
+  array[N] int<lower=0,upper=1> indx_H;    // is case from a hatchery (1) or wild (0) pop?
   array[N_age] int<lower=0> ocean_ages;    // ocean ages
   vector[N_age] ones_N_age = rep_vector(1,N_age); // for rowsums of p matrix 
   vector[N] ones_N = rep_vector(1,N);      // for elementwise inverse of rowsums 
@@ -285,29 +285,26 @@ transformed parameters {
     if(RRS[1]) {
       vector[N_pop] logit_psi_W = logit(mu_psi_W) + sigma_psi*zeta_psi_W;
       vector[N_pop] logit_psi_H = logit(mu_psi_H) + sigma_psi*zeta_psi_H;
-      psi_W = rep_vector(0,N_pop);
-      psi_W[which_W_pop] = inv_logit(logit_psi_W[which_W_pop]);
-      psi_W_Xbeta = inv_logit(logit_psi_W[pop] + Xbeta_psi) .* (1 - indx_H);
-      psi_H = rep_vector(0,N_pop);
-      psi_H[which_W_pop] = inv_logit(logit_psi_H[which_W_pop]);
-      psi_H_Xbeta = inv_logit(logit_psi_H[pop] + Xbeta_psi) .* (1 - indx_H);
+      psi_W = inv_logit(logit_psi_W);
+      psi_W_Xbeta = inv_logit(logit_psi_W[pop] + Xbeta_psi);
+      psi_H = inv_logit(logit_psi_H);
+      psi_H_Xbeta = inv_logit(logit_psi_H[pop] + Xbeta_psi);
     } else {
       vector[N_pop] logit_psi = logit(mu_psi) + sigma_psi*zeta_psi;
-      psi = rep_vector(0,N_pop);
-      psi[which_W_pop] = inv_logit(logit_psi[which_W_pop]);
-      psi_Xbeta = inv_logit(logit_psi[pop] + Xbeta_psi) .* (1 - indx_H);
+      psi = inv_logit(logit_psi);
+      psi_Xbeta = inv_logit(logit_psi[pop] + Xbeta_psi);
     }
     
     if(RRS[2]) {
-      Mmax_W = rep_vector(0,N_pop);
-      Mmax_W[which_W_pop] = exp(mu_Mmax_W + sigma_Mmax*zeta_Mmax_W[which_W_pop]);
+      Mmax_W = exp(mu_Mmax_W + sigma_Mmax*zeta_Mmax_W);
+      Mmax_W[which_H_pop] = rep_vector(0,N_H_pop);
       Mmax_W_Xbeta = Mmax_W[pop] .* Xbeta_Mmax;
-      Mmax_H = rep_vector(0,N_pop);
-      Mmax_H[which_W_pop] = exp(mu_Mmax_H + sigma_Mmax*zeta_Mmax_H[which_W_pop]);
+      Mmax_H = exp(mu_Mmax_H + sigma_Mmax*zeta_Mmax_H);
+      Mmax_H[which_H_pop] = rep_vector(0,N_H_pop);
       Mmax_H_Xbeta = Mmax_H[pop] .* Xbeta_Mmax;
     } else {
-      Mmax = rep_vector(0,N_pop);
-      Mmax[which_W_pop] = exp(mu_Mmax + sigma_Mmax*zeta_Mmax[which_W_pop]);
+      Mmax = exp(mu_Mmax + sigma_Mmax*zeta_Mmax);
+      Mmax[which_H_pop] = rep_vector(0,N_H_pop);
       Mmax_Xbeta = Mmax[pop] .* Xbeta_Mmax;
     }
   }
@@ -383,7 +380,7 @@ transformed parameters {
       if(pop_year[i] <= ocean_ages[a]) // use initial values
       {
         R_a = S_init[ii]*q_orphan[a - (N_age - N_orphan_age)];
-        q_F_a[a] = q_F_init[ii];
+        q_F_a = q_F_init[ii];
       }
       else // use recruitment process model 
       {
@@ -412,7 +409,7 @@ transformed parameters {
     q[i,] = S_a[year[i]][pop[i],] / S[i];
     q_F[i] = S_MF[year[i]][pop[i],2] / S[i];
     q_O[i,] = append_col(sum(S_O[year[i]][pop[i],which_D_pop]), 
-                         S_O[year[i][pop[i],which_O_pop]]) / S[i];
+                         S_O[year[i]][pop[i],which_O_pop]) / S[i];
 
     // Expected egg production from brood year
     // weighted by age structure and sex ratio
@@ -541,9 +538,9 @@ model {
   M_obs[which_M_obs] ~ lognormal(log(M_downstream[which_M_obs]), tau_M[which_M_obs]); // likelihood of smolts
   // S[which_S_obs] ~ lognormal(log(S_obs[which_S_obs]), tau_S[which_S_obs]); // prior on spawners
   S_obs[which_S_obs] ~ lognormal(log(S[which_S_obs]), tau_S[which_S_obs]); // likelihood of spawners
-  target += sum(n_age_obs .* log(q)); // obs wild age freq: n_age_obs[i] ~ multinomial(q[i])
-  target += sum(n_O_obs .* log(q_O)); // obs origin freq: n_O_obs[i] ~ multinomial(q_O[i])
-  n_F_obs ~ binomial(n_MF_obs, q_F);  // observed counts of female vs. male spawners
+  target += sum(n_age_obs .* log(q)); // observed age frequencies: n_age_obs[i] ~ multinomial(q[i])
+  target += sum(n_O_obs .* log(q_O)); // observed origin frequencies: n_O_obs[i] ~ multinomial(q_O[i])
+  n_F_obs ~ binomial(n_MF_obs, q_F);  // observed frequencies of female vs. male spawners
 }
 
 generated quantities {
@@ -556,8 +553,8 @@ generated quantities {
   vector[N] p_HOS = row_sums(q_O[,2:]); // true proportion hatchery-origin spawners
   // ?? vector[N_E] LL_E_obs; ??
   vector[N] M_downstream;       // total smolts including upstream populations 
-  vector[N] LL_M_obs;           // pointwise log-likelihood of smolts
-  vector[N] LL_S_obs;           // pointwise log-likelihood of spawners
+  vector[N] LL_M_obs = rep_vector(0,N); // pointwise log-likelihood of smolts
+  vector[N] LL_S_obs = rep_vector(0,N); // pointwise log-likelihood of spawners
   vector[N] LL_n_age_obs;       // pointwise log-likelihood of wild age frequencies
   vector[N] LL_n_O_obs;         // pointwise log-likelihood of origin-frequencies
   vector[N] LL_n_F_obs;         // pointwise log-likelihood of female vs. male frequencies
@@ -573,11 +570,9 @@ generated quantities {
   
   M_downstream = M;
   for(i in 1:N_upstream) M_downstream[downstream_trap[i]] += M[which_upstream[i]];
-  LL_M_obs = rep_vector(0,N);
   for(i in 1:N_M_obs)
     LL_M_obs[which_M_obs[i]] = lognormal_lpdf(M[which_M_obs[i]] | log(M_obs[which_M_obs[i]]), tau_M[which_M_obs[i]]); 
     // LL_M_obs[which_M_obs[i]] = lognormal_lpdf(M_obs[which_M_obs[i]] | log(M[which_M_obs[i]]), tau_M[which_M_obs[i]]); 
-  LL_S_obs = rep_vector(0,N);
   for(i in 1:N_S_obs)
     LL_S_obs[which_S_obs[i]] = lognormal_lpdf(S[which_S_obs[i]] | log(S_obs[which_S_obs[i]]), tau_S[which_S_obs[i]]); 
     // LL_S_obs[which_S_obs[i]] = lognormal_lpdf(S_obs[which_S_obs[i]] | log(S[which_S_obs[i]]), tau_S[which_S_obs[i]]); 
