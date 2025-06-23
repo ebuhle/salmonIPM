@@ -31,6 +31,7 @@
 #' # Prepare simulated data for Stan
 #' dat <- stan_data("IPM_SS_pp", fish_data = sim_out$sim_dat)
 #'
+#' @importFrom tidyr pivot_longer starts_with
 #' @export
 
 stan_data <- function(stan_model = c("IPM_SS_np","IPM_SSiter_np","IPM_SS_pp","IPM_SSiter_pp",
@@ -119,14 +120,29 @@ stan_data <- function(stan_model = c("IPM_SS_np","IPM_SSiter_np","IPM_SS_pp","IP
       ifelse(life_cycle == "SSiter", 1, 0)
   }
 
-  # Origin-frequency, sex-frequency and fecundity data
+  # Origin-frequency, sex-frequency, and fecundity data
+  # Conditional broodstock transfer probabilities
   if(life_cycle == "LCRchum") {
     n_O_obs <- as.matrix(fish_data[, grep("n_O", names(fish_data))])
     if(any(is.na(n_O_obs))) 
       stop("NA found in compositional data (n_O_obs). If an origin was not seen ",
            "in the sample or no sample was taken, the observed frequency is 0.")
-    which_H_pop <- sapply(strsplit(colnames(n_O_obs), "_"), 
+    which_O_pop <- sapply(strsplit(colnames(n_O_obs), "_"), 
                           function(x) as.numeric(substring(x[2], 2)))[-1]
+    which_H_pop <- grep("Hatchery", levels(factor(fish_data$pop)))
+    
+    n_B_obs <- as.matrix(fish_data[, grep("n_B", names(fish_data))])
+    if(any(is.na(n_B_obs))) 
+      stop("NA found in compositional data (n_B_obs). If an origin was not seen ",
+           "in the sample or no sample was taken, the observed frequency is 0.")
+    p_B_obs <- cbind(pop = pop, year = year, sweep(n_B_obs, 1, B_take_obs, "/"))
+    p_B_obs <- pivot_longer(p_B_obs, cols = starts_with("n_B"), names_to = "disposition",
+                            names_pattern = "n_B(.*)_obs", values_to = "p")
+    names(p_B_obs)[names(p_B_obs) == "pop"] <- "location"
+    p_B_obs$disposition <- factor(levels(p_B_obs$location)[as.numeric(p_B_obs$disposition)],
+                                  levels = levels(p_B_obs$location))
+    P_B <- tapply(p_B_obs$p, list(p_B_obs$year, p_B_obs$disposition, p_B_obs$location),
+                  FUN = identity, default = 0)
     
     if(any(is.na(n_M_obs + n_F_obs))) 
       stop("NA found in compositional data (n_[M|F]_obs). If a sex was not seen ",
@@ -525,8 +541,8 @@ stan_data <- function(stan_model = c("IPM_SS_np","IPM_SSiter_np","IPM_SS_pp","IP
                   K_M = ifelse(is.null(X$M), 0, ncol(X$M)), 
                   X_M = if(is.null(X$M)) matrix(0,N,0) else X$M,
                   # smolt abundance and observation error
-                  N_M_obs = sum(!is.na(M_obs) & !pop %in% which_H_pop),
-                  which_M_obs = as.vector(which(!is.na(M_obs) & !pop %in% which_H_pop)),
+                  N_M_obs = sum(!is.na(M_obs)),
+                  which_M_obs = as.vector(which(!is.na(M_obs))),
                   M_obs = replace(M_obs, is.na(M_obs) | M_obs==0, 1),
                   N_tau_M_obs = sum(!is.na(tau_M_obs)),
                   which_tau_M_obs = as.vector(which(!is.na(tau_M_obs))),
@@ -539,8 +555,8 @@ stan_data <- function(stan_model = c("IPM_SS_np","IPM_SSiter_np","IPM_SS_pp","IP
                   X_MS = if(is.null(X$s_MS)) matrix(0,N,0) else X$s_MS,
                   prior_mu_MS = prior_mu_MS,
                   # spawner abundance and observation error
-                  N_S_obs = sum(!is.na(S_obs) & !pop %in% which_H_pop),
-                  which_S_obs = as.vector(which(!is.na(S_obs) & !pop %in% which_H_pop)),
+                  N_S_obs = sum(!is.na(S_obs)),
+                  which_S_obs = as.vector(which(!is.na(S_obs))),
                   S_obs = replace(S_obs, is.na(S_obs) | S_obs==0, 1),
                   N_tau_S_obs = sum(!is.na(tau_S_obs)),
                   which_tau_S_obs = as.vector(which(!is.na(tau_S_obs))),
@@ -550,21 +566,23 @@ stan_data <- function(stan_model = c("IPM_SS_np","IPM_SSiter_np","IPM_SS_pp","IP
                   max_age = max_age,
                   n_age_obs = replace(n_age_obs, pop %in% which_H_pop, 0),
                   prior_mu_p = prior_mu_p,
-                  n_M_obs = as.vector(replace(n_M_obs, pop %in% which_H_pop, 0)),
-                  n_F_obs = as.vector(replace(n_F_obs, pop %in% which_H_pop, 0)),
+                  n_M_obs = as.vector(n_M_obs),
+                  n_F_obs = as.vector(n_F_obs),
                   p_G_obs = as.vector(p_G_obs),
                   # origin composition
-                  N_H_pop = length(which_H_pop),
-                  which_H_pop = which_H_pop,
+                  N_O_pop = length(which_O_pop),
+                  which_O_pop = which_O_pop,
                   n_O_obs = n_O_obs,
                   # fishery and hatchery removals and translocations
                   F_rate = replace(F_rate, is.na(F_rate), 0),
                   age_F = age_F,
+                  N_H_pop = length(which_H_pop),
+                  which_H_pop = which_H_pop,
                   N_B = sum(B_take_obs > 0),
                   which_B = as.vector(which(B_take_obs > 0)),
                   B_take_obs = B_take_obs[B_take_obs > 0],
                   age_B = age_B,
-                  S_add_obs = replace(S_add_obs, is.na(S_add_obs), 0)
+                  P_B = P_B
                 ),
                 
                 # IPM_ICchinook = list(
