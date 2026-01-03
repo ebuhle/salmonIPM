@@ -96,7 +96,9 @@ prior_summary.salmonIPMfit <- function(object, digits = 2, ...) {
 #'
 #'   Type (3) is extracted similarly to type (2), but bound declarations are
 #'   also used to set the `bounds` attribute on otherwise unbounded priors (e.g.
-#'   normal) of types (1) and (2).
+#'   normal) of types (1) and (2). A special case is simplex parameters,
+#'   which unless otherwise specified are assigned a `dirichlet(1)` prior
+#'   (ignoring the actual dimension for now).
 #'
 #' @importFrom utils relist
 
@@ -122,7 +124,7 @@ get_prior_info <- function(stan_data, stanmodel, pars)
   # ~ *     this line contains a sampling statement (may be 0 or more spaces after "~")
   # (.+);   pdf capture group: any character, 1 or more, then end of sampling statement
   # .*      any character, 0 or more (e.g. comment)
-  hard_pars <- pars[!(pars %in% names(user_priors))] 
+  hard_pars <- pars[!pars %in% names(user_priors)] 
   hard_priors <- lapply(hard_pars, function(.par) {
     regex <- paste0(".*", .par, ".*~ *(.+);.*")
     prtext <- gsub(regex, "\\1", grep(regex, smtext, value = TRUE))
@@ -140,10 +142,10 @@ get_prior_info <- function(stan_data, stanmodel, pars)
   # (-?\\d+)    ub capture group 
   # .*          any character, 0 or more (e.g. >, dims)
   #  .par       space before hyperparameter name
-  # ;.*         end of statement followed by 0 or more characters (e.g. comment)
+  # ;.*         end of declaration followed by 0 or more characters (e.g. comment)
   bounded_priors <- sapply(pars, as.null, 0)
   for(.par in pars) {
-    if(grepl("rho_alpha.max", .par)) {  # hack b/c declared parameter is L_alpha[R/M]max
+    if(grepl("rho_alpha.max", .par)) {  # hack b/c declared parameter is L_alpha[R|M]max
       bounded_priors[[.par]] <- structure(uniform(-1,1), type = "bounded")
     } else {
       lregex <- paste0(".+lower *= *(-?\\d+).* ", .par, ";.*")
@@ -164,7 +166,22 @@ get_prior_info <- function(stan_data, stanmodel, pars)
     }
   }
   bounded_priors <- bounded_priors[!sapply(bounded_priors, is.null)]
-
-  all_priors <- c(user_priors, hard_priors, bounded_priors)
+  
+  # Implicit bounded priors declared by parameter type: simplex
+  #
+  # .+        any character, 1 or more (e.g. indent spaces, array declaration) 
+  # simplex   parameter type
+  # \\[.+\\]  simplex dimension (don't use this info for now)
+  #  .par     space before hyperparameter name
+  # ;.*       end of declaration followed by 0 or more characters (e.g. comment)
+  simplex_pars <- pars[!pars %in% c(names(user_priors), names(hard_priors))] 
+  simplex_priors <- lapply(simplex_pars, function(.par) {
+    sregex <- paste0(".+simplex\\[.+\\] ", .par, ";.*")
+    smatch <- any(grepl(sregex, smtext))
+    if(smatch) structure(dirichlet(1), type = "bounded")
+  })
+  simplex_priors <- simplex_priors[!sapply(simplex_priors, is.null)]
+  
+  all_priors <- c(user_priors, hard_priors, bounded_priors, simplex_priors)
   return(all_priors[match(names(pars), names(all_priors))])
 }
