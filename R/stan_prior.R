@@ -3,11 +3,11 @@
 #' Takes an optional user-specified prior function and otherwise returns default
 #' prior parameters for the given `stan_model`. This function is for internal use. 
 #' 
-#' @param default The default prior function as described in [`priors`].
 #' @param user A user-specified prior function as described in [`priors`].
+#' @param default The default prior function as described in [`priors`].
 #'
-#' @return A named array of user-specifiable prior parameters whose elements are part of the
-#' `data` argument passed to [rstan::sampling()] when fitting **salmonIPM** models.
+#' @return A named array of user-specifiable prior parameters whose elements are part of
+#' the `data` argument passed to [rstan::sampling()] when fitting **salmonIPM** models.
 #' The `dist` attribute is a character string giving the name of the distribution.
 #' 
 #' @importFrom utils as.relistable
