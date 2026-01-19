@@ -311,7 +311,7 @@ salmonIPM <- function(stan_model = paste(model, life_cycle, ifelse(pool_pops, "p
   life_cycle <- match.arg(life_cycle)
   force(stan_model)
   mlp <- strsplit(stan_model, "_")[[1]]
-  model <- mlp[1]                           # override args if stan_model is specified
+  model <- mlp[1]             # override these args if stan_model is specified
   life_cycle <- mlp[2]
   pool_pops <- mlp[3] == "pp"
   stanmodel <- gsub("iter", "", stan_model) # the same Stan code handles semel/iteroparity 
@@ -319,10 +319,10 @@ salmonIPM <- function(stan_model = paste(model, life_cycle, ifelse(pool_pops, "p
   if(SR_fun == "DI") SR_fun <- "exp"
   if(SR_fun %in% c("B-H","bh","b-h")) SR_fun <- "BH"
   if(SR_fun == "ricker") SR_fun <- "Ricker"
-  validate_RRS(stan_model = stan_model, SR_fun = SR_fun, RRS = RRS)
-  
+
   .call <- as.list(match.call(expand.dots = TRUE))
-  for(n in grep("_data", names(.call), value = TRUE, invert = TRUE)) .call[[n]] <- eval(.call[[n]])
+  for(n in grep("_data", names(.call), value = TRUE, invert = TRUE)) 
+    .call[[n]] <- eval(.call[[n]])
   .call <- as.call(.call)
   
   dat <- stan_data(stan_model = stan_model, SR_fun = SR_fun, RRS = RRS, ages = ages, 
@@ -337,8 +337,10 @@ salmonIPM <- function(stan_model = paste(model, life_cycle, ifelse(pool_pops, "p
                      RRS = RRS, par_models = par_models)
   prior.info <- get_prior_info(stan_data = dat, stanmodel = stanmodels[[stanmodel]], pars = hyper)
 
-  if(is.null(init)) init <- stan_init(stan_model = stan_model, stan_data = dat, chains = chains)
-  if(is.null(control$adapt_delta)) control$adapt_delta <- 0.95
+  if(is.null(init)) 
+    init <- stan_init(stan_model = stan_model, stan_data = dat, chains = chains)
+  if(is.null(control$adapt_delta)) 
+    control$adapt_delta <- 0.95
   
   stanfit <- rstan::sampling(stanmodels[[stanmodel]], 
                              data = dat, init = init, pars = pars,
