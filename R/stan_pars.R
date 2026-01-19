@@ -84,6 +84,19 @@ stan_pars <- function(stan_model = c("IPM_SS_np","IPM_SSiter_np","IPM_SS_pp","IP
       states = c("p_M","M","q_M","s_MS","p_MS","S","q_MS","q_GR","p_HOS")
     ),
     
+    IPM_LCRchum_pp = list(
+      hyper = c("mu_E","sigma_E","delta_NG",
+                "mu_psi","mu_psi_W","mu_psi_H","delta_mu_psi","beta_psi","sigma_psi",
+                "mu_Mmax","mu_Mmax_W","mu_Mmax_H","delta_mu_Mmax","beta_Mmax","sigma_Mmax",
+                "beta_M","rho_M","sigma_year_M","sigma_M","mu_tau_M","sigma_tau_M",
+                "mu_MS","beta_MS","rho_MS","sigma_year_MS","sigma_MS",
+                "mu_p","sigma_pop_p","R_pop_p","sigma_p","R_p",
+                "mu_F","sigma_pop_F","sigma_F","p_D","mu_tau_S","sigma_tau_S"),
+      group = c("psi","psi_W","psi_H","delta_psi","Mmax","Mmax_W","Mmax_H","delta_Mmax",
+                "eta_year_M","eta_year_MS","mu_pop_alr_p"),
+      states = c("M","tau_M","s_MS","p","p_F","S","tau_S","q","q_F","q_O","p_HOS","b")
+    ),
+    
     # IPM_ICchinook_pp = list(
     #   hyper = c(if("mu_alpha" %in% RRS) c("mu_alpha_W","mu_alpha_H","delta_mu_alpha") else "mu_alpha",
     #             "beta_alpha","sigma_alpha",
@@ -98,19 +111,6 @@ stan_pars <- function(stan_model = c("IPM_SS_np","IPM_SSiter_np","IPM_SS_pp","IP
     #             "s_D","SAR","s_U","mu_pop_alr_p"),
     #   states = c("M","p","p_HOS","S","q")
     # ),
-    
-    IPM_LCRchum_pp = list(
-      hyper = c("mu_E","sigma_E","delta_NG",
-                "mu_psi","mu_psi_W","mu_psi_H","delta_mu_psi","beta_psi","sigma_psi",
-                "mu_Mmax","mu_Mmax_W","mu_Mmax_H","delta_mu_Mmax","beta_Mmax","sigma_Mmax",
-                "beta_M","rho_M","sigma_year_M","sigma_M","mu_tau_M","sigma_tau_M",
-                "mu_MS","beta_MS","rho_MS","sigma_year_MS","sigma_MS",
-                "mu_p","sigma_pop_p","R_pop_p","sigma_p","R_p",
-                "mu_F","sigma_pop_F","sigma_F","p_D","mu_tau_S","sigma_tau_S"),
-      group = c("psi","psi_W","psi_H","delta_psi","Mmax","Mmax_W","Mmax_H","delta_Mmax",
-                "eta_year_M","eta_year_MS","mu_pop_alr_p"),
-      states = c("M","tau_M","s_MS","p","p_F","S","tau_S","q","q_F","q_O","p_HOS")
-    ),
     
     RR_SS_np = list(
       hyper = c("alpha","Rmax","rho_R","sigma_R","R_hat"),
