@@ -55,7 +55,7 @@ stan_data <- function(stan_model = c("IPM_SS_np","IPM_SSiter_np","IPM_SS_pp","IP
   # General error-checking
   fish_data <- as.data.frame(fish_data)
   for(i in c("pop","year","A","fit_p_HOS","B_take_obs"))
-    if(!is.null(fish_data[,i]) & any(is.na(fish_data[,i])))
+    if(!is.null(fish_data[[i]]) & any(is.na(fish_data[[i]])))
       stop("Missing values not allowed in fish_data$", i)
   for(i in names(fish_data)) assign(i, fish_data[[i]])
   N <- nrow(fish_data)
@@ -70,9 +70,11 @@ stan_data <- function(stan_model = c("IPM_SS_np","IPM_SSiter_np","IPM_SS_pp","IP
                             gsub("iter", "", life_cycle), # same Stan code for iteroparity
                             sep = "_")
   validate_RRS(stan_model = stan_model, SR_fun = SR_fun, RRS = RRS)
+  validate_par_models(stan_model = stan_model, SR_fun = SR_fun, RRS = RRS,
+                      par_models = par_models)
   X <- par_model_matrix(par_models = par_models, fish_data = fish_data, 
                         center = center, scale = scale)
-  
+
   # Age of fixed subadult stages
   if(!life_cycle %in% c("SS","SSiter","SMaS") & (any(is.na(ages)) | is.null(ages)))
     stop("Multi-stage models must specify age for all fixed-age subadult stages")
@@ -123,35 +125,53 @@ stan_data <- function(stan_model = c("IPM_SS_np","IPM_SSiter_np","IPM_SS_pp","IP
   # Origin-frequency, sex-frequency, and fecundity data
   # Conditional broodstock transfer probabilities
   if(life_cycle == "LCRchum") {
-    n_O_obs <- as.matrix(fish_data[, grep("n_O", names(fish_data))])
-    if(any(is.na(n_O_obs))) 
-      stop("NA found in compositional data (n_O_obs). If an origin was not seen ",
-           "in the sample or no sample was taken, the observed frequency is 0.")
-    which_O_pop <- sapply(strsplit(colnames(n_O_obs), "_"), 
-                          function(x) as.numeric(substring(x[2], 2)))[-1]
-    which_H_pop <- grep("Hatchery", levels(factor(fish_data$pop)))
-    
-    n_B_obs <- as.matrix(fish_data[, grep("n_B", names(fish_data))])
-    if(any(is.na(n_B_obs))) 
-      stop("NA found in compositional data (n_B_obs). If an origin was not seen ",
-           "in the sample or no sample was taken, the observed frequency is 0.")
-    p_B_obs <- cbind(pop = pop, year = year, sweep(n_B_obs, 1, B_take_obs, "/"))
-    p_B_obs <- pivot_longer(p_B_obs, cols = starts_with("n_B"), names_to = "disposition",
-                            names_pattern = "n_B(.*)_obs", values_to = "p")
-    names(p_B_obs)[names(p_B_obs) == "pop"] <- "location"
-    p_B_obs$disposition <- factor(levels(p_B_obs$location)[as.numeric(p_B_obs$disposition)],
-                                  levels = levels(p_B_obs$location))
-    P_B <- tapply(p_B_obs$p, list(p_B_obs$year, p_B_obs$disposition, p_B_obs$location),
-                  FUN = identity, default = 0)
-    
     if(any(is.na(n_M_obs + n_F_obs))) 
       stop("NA found in compositional data (n_[M|F]_obs). If a sex was not seen ",
            "in the sample or no sample was taken, the observed frequency is 0.")
-    
     if(is.null(fecundity_data))
       stop("Fecundity data must be provided for Lower Columbia chum IPM") 
     if(any(is.na(fecundity_data)))
       stop("Missing observations are not allowed in fecundity data")
+    
+    which_H_pop <- grep("Hatchery", levels(factor(fish_data$pop)))
+    use_M_obs <- !is.na(M_obs) & !(M_obs == 0 & pop %in% which_H_pop)
+    use_S_obs <- !is.na(S_obs) & !(S_obs == 0 & pop %in% which_H_pop)
+
+    n_O_obs <- as.matrix(fish_data[, grep("n_O", names(fish_data))])
+    if(any(is.na(n_O_obs))) 
+      stop("NA found in compositional data (n_O_obs). If an origin was not seen ",
+           "in the sample or no sample was taken, the observed frequency is 0.")
+    which_O_pop <- sapply(strsplit(colnames(n_O_obs[,-1]), "_"), 
+                          function(x) as.numeric(substring(x[2], 2)))
+    # identify cells of n_O_obs that are structural zeros because
+    # (1) a given known-origin pop did not exist in any parental brood year
+    # (2) a known-origin pop did not receive any broodstock in a given year
+    N_O_pop <- length(which_O_pop)
+    use_n_O_obs <- matrix(NA, N, 1 + N_O_pop)
+    use_n_O_obs[,1] <- 
+      ifelse(pop %in% which_O_pop, !is.na(S_obs[i]) & S_obs[i] > 0, TRUE)
+    for(i in 1:N) {
+      for(j in 1:N_O_pop) {
+        use_n_O_obs[i,1+j] <- 
+          any(pop == which_O_pop[j] & year == year[i] - (max_age - N_age + 1) & 
+                !is.na(S_obs) & S_obs > 0) &
+          ifelse(pop[i] %in% which_O_pop, !is.na(S_obs[i]) & S_obs[i] > 0, TRUE)
+      }
+    }
+    
+    n_B_obs <- fish_data[, grep("n_B", names(fish_data))]
+    if(any(is.na(n_B_obs))) 
+      stop("NA found in compositional data (n_B_obs). If an origin was not seen ",
+           "in the broodstock or no broodstock was taken, the observed frequency is 0.")
+    p_B_obs <- cbind(location = factor(fish_data$pop), year = year, 
+                     sweep(n_B_obs, 1, pmax(B_take_obs, 1), "/"))
+    p_B_obs <- pivot_longer(p_B_obs, cols = starts_with("n_B"), values_to = "p",
+                            names_to = "disposition", names_pattern = "n_B(.*)_obs", 
+                            names_transform = as.integer)
+    p_B_obs$disposition <- factor(levels(p_B_obs$location)[p_B_obs$disposition],
+                                  levels = levels(p_B_obs$location))
+    P_B <- tapply(p_B_obs$p, list(p_B_obs$year, p_B_obs$disposition, p_B_obs$location),
+                  FUN = identity, default = 0)
   } else {
     fit_p_HOS <- as.logical(fit_p_HOS)
     if(any(is.na(n_W_obs + n_H_obs)))
@@ -183,7 +203,7 @@ stan_data <- function(stan_model = c("IPM_SS_np","IPM_SSiter_np","IPM_SS_pp","IP
     age_B <- rep(1, switch(life_cycle, SSiter = N_age + 1, SMaS = N_MSage, N_age))
   age_B <- as.numeric(age_B)
   
-  # Partially observed and effective age information
+  # Partially observed and effective age indicators
   if(model_life_cycle == "IPM_SS") {
     if(is.null(age_S_obs)) 
       age_S_obs <- rep(1, switch(life_cycle, SSiter = N_age + 1, N_age))
@@ -541,8 +561,8 @@ stan_data <- function(stan_model = c("IPM_SS_np","IPM_SSiter_np","IPM_SS_pp","IP
                   K_M = ifelse(is.null(X$M), 0, ncol(X$M)), 
                   X_M = if(is.null(X$M)) matrix(0,N,0) else X$M,
                   # smolt abundance and observation error
-                  N_M_obs = sum(!is.na(M_obs)),
-                  which_M_obs = as.vector(which(!is.na(M_obs))),
+                  N_M_obs = sum(use_M_obs),
+                  which_M_obs = as.vector(which(use_M_obs)),
                   M_obs = replace(M_obs, is.na(M_obs) | M_obs==0, 1),
                   N_tau_M_obs = sum(!is.na(tau_M_obs)),
                   which_tau_M_obs = as.vector(which(!is.na(tau_M_obs))),
@@ -555,23 +575,25 @@ stan_data <- function(stan_model = c("IPM_SS_np","IPM_SSiter_np","IPM_SS_pp","IP
                   X_MS = if(is.null(X$s_MS)) matrix(0,N,0) else X$s_MS,
                   prior_mu_MS = prior_mu_MS,
                   # spawner abundance and observation error
-                  N_S_obs = sum(!is.na(S_obs)),
-                  which_S_obs = as.vector(which(!is.na(S_obs))),
+                  N_S_obs = sum(use_S_obs),
+                  which_S_obs = as.vector(which(use_S_obs)),
                   S_obs = replace(S_obs, is.na(S_obs) | S_obs==0, 1),
                   N_tau_S_obs = sum(!is.na(tau_S_obs)),
                   which_tau_S_obs = as.vector(which(!is.na(tau_S_obs))),
                   tau_S_obs = replace(tau_S_obs, is.na(tau_S_obs), 0),
                   # spawner age structure and sex ratio
-                  N_age = N_age, 
+                  N_age = N_age,
                   max_age = max_age,
-                  n_age_obs = replace(n_age_obs, pop %in% which_H_pop, 0),
+                  n_age_obs = n_age_obs,
                   prior_mu_p = prior_mu_p,
-                  n_M_obs = as.vector(n_M_obs),
+                  n_MF_obs = as.vector(n_M_obs + n_F_obs),
                   n_F_obs = as.vector(n_F_obs),
                   p_G_obs = as.vector(p_G_obs),
                   # origin composition
-                  N_O_pop = length(which_O_pop),
+                  N_O_pop = N_O_pop,
                   which_O_pop = which_O_pop,
+                  N_n_O_obs = sum(use_n_O_obs),
+                  which_n_O_obs = which(as.vector(use_n_O_obs)),
                   n_O_obs = n_O_obs,
                   # fishery and hatchery removals and translocations
                   F_rate = replace(F_rate, is.na(F_rate), 0),
