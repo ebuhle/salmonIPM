@@ -1,6 +1,6 @@
 Package: salmonIPM
 Title: Integrated Population Models for Pacific Salmonids
-Version: 1.6.3
+Version: 1.7.0
 Authors@R: as.person(c(
     "Eric Buhle <eric.buhle@noaa.gov> [aut, cre]", 
     "Mark Scheuerell <scheuerl@uw.edu> [aut]"
