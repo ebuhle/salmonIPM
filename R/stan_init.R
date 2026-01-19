@@ -55,15 +55,16 @@ stan_init <- function(stan_model = c("IPM_SS_np","IPM_SSiter_np","IPM_SS_pp","IP
   N_pop <- max(pop)
   N_year <- max(year)
   
-  # Data to estimate initial origin-composition parameters
+  # Crude estimates of dispersal probabilities
   if(life_cycle == "LCRchum") {
     n_Oknown_obs <- n_O_obs[, -1, drop = FALSE]
+    p_D <- aggregate(pmax(n_Oknown_obs, 0.1), list(pop = pop), sum)[-which_H_pop,-1]
+    p_D <- t(sweep(p_D, 2, colSums(p_D), "/"))
+    # approximate, only used for estimating states below
     n_H_obs <- rowSums(n_Oknown_obs)
     which_H <- which(n_H_obs > 0)
     n_H_obs <- n_H_obs[which_H]
     n_W_obs <- n_O_obs[which_H,1]
-    p_D <- aggregate(pmax(n_Oknown_obs, 0.1), list(pop = pop), sum)[-which_H_pop,-1]
-    p_D <- t(sweep(p_D, 2, colSums(p_D), "/"))
   }
   
   ## Crude estimates of states 
