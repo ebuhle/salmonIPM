@@ -29,9 +29,9 @@ extract1 <- function(object, par) {
   extract(object$stanfit, par)[[1]]
 }
 
-#' Validate RRS specification
+#' Validate `RRS` specification
 #'
-#' Check whether an RRS specification is consistent with a stan_model.
+#' Check whether an `RRS` specification is consistent with a `stan_model`.
 #'
 #' @inheritParams salmonIPM
 #' @return Nothing is returned; the function throws an error if the requested
@@ -57,6 +57,27 @@ validate_RRS <- function(stan_model, SR_fun = "BH", RRS) {
     stop(paste(RRS[!RRS_check], collapse = ", "), 
          " is not a valid RRS specification in ", stan_model, ".\n",
          "  Available options are: ", paste(na.omit(RRS_opts), collapse = ", "), ".")
+}
+
+#' Validate `par_models` specification
+#'
+#' Check whether a `par_models` specification is consistent with a `stan_model`.
+#'
+#' @inheritParams salmonIPM
+#' @return Nothing is returned; the function throws an error if any of the 
+#'   responses specified in `par_models` is not a modelable parameter or state
+#'   in `stan_model` given `SR_fun` and `RRS`.
+validate_par_models <- function(stan_model, SR_fun = "BH", RRS = "none", 
+                                par_models = NULL) {
+  modeled_pars <- sapply(par_models, function(f) all.vars(f)[1])
+  for(i in seq_along(par_models)) {
+    test_pars <- stan_pars(stan_model = stan_model, SR_fun = SR_fun, RRS = RRS,
+                           par_models = par_models[i])
+    if(!any(grepl("beta", test_pars)))
+      stop(modeled_pars[i], " is not a parameter or state in ", stan_model,
+           "\n  that can be modeled as a function of covariates.\n",
+           "  See ?salmonIPM for available model-parameter combinations.")
+  }
 }
 
 #' Select parameters to include
