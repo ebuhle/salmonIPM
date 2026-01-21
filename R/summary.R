@@ -36,7 +36,7 @@
 #'   and [summarize_draws()] is called to compute the summary statistics and
 #'   diagnostics. See that function's documentation for available diagnostic
 #'   functions, syntax and examples. The default summaries are `mean`, `sd`, and
-#'   `~quantile(.x, probs)`, and the default [diagnostics] are the bulk
+#'   `~ quantile(.x, probs)`, and the default [diagnostics] are the bulk
 #'   effective sample size [ess_bulk()] and the Gelman-Rubin potential scale
 #'   reduction factor [rhat()]. If other summary or diagnostic functions are
 #'   specified via `funs`, they override the defaults rather than augmenting

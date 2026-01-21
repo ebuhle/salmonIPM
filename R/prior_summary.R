@@ -48,7 +48,7 @@ prior_summary.salmonIPMfit <- function(object, digits = 2, ...) {
     args <- paste(paste0(names(args), " = ", args), collapse = ", ")
     bounds <- attr(prinfo, "bounds")
     if(!is.null(bounds)) 
-      bounds <- paste0(" T[", gsub("NA", "", paste0(bounds, collapse = ", ")), "]")
+      bounds <- paste0(" T[", gsub("NA", "", paste(bounds, collapse = ", ")), "]")
     paste0(user[.par], pad[.par], .par, " ~ ", dist, "(", args, ")", bounds, "\n") 
   })
   prsum <- unlist(prsum)
