@@ -9,19 +9,21 @@
 #'   level, corresponding to unique rows in `fish_data`), and `"ppd"` (only if
 #'   `model == "RR"`, observation-level predictions drawn from the posterior
 #'   predictive distribution).
+#' @param include_levels Logical indicating whether the hierarchical level of
+#'   each parameter should be returned as the names of the result.
 #' @param object A [salmonIPMfit] object. If this is provided then `SR_fun`,
 #'   `RRS` and `par_models` are not needed and will be ignored; their values
 #'   are extracted from `object`.
 #' @inheritParams salmonIPM
 #'
-#' @return Character vector with names of selected parameters and states
+#' @return Character vector with names of selected parameters and states.
 #'
 #' @export
 
 stan_pars <- function(stan_model = c("IPM_SS_np","IPM_SSiter_np","IPM_SS_pp","IPM_SSiter_pp",
                                      "IPM_SMS_np","IPM_SMS_pp","IPM_SMaS_np",
                                      "IPM_LCRchum_pp","RR_SS_np","RR_SS_pp"), 
-                      pars = c("all","hyper","group","states","ppd"), 
+                      pars = c("all","hyper","group","states","ppd"), include_levels = FALSE,
                       SR_fun = "BH", RRS = "none", par_models = NULL, object = NULL)
 {
   if(!is.null(object)) {
@@ -52,7 +54,7 @@ stan_pars <- function(stan_model = c("IPM_SS_np","IPM_SSiter_np","IPM_SS_pp","IP
                 "mu_p","sigma_pop_p","R_pop_p","sigma_p","R_p",
                 "mu_SS","beta_SS","rho_SS","sigma_year_SS","sigma_SS","tau"),
       group = c("alpha","alpha_W","alpha_H","delta_alpha","Rmax","Rmax_W","Rmax_H","delta_Rmax",
-                "eta_year_R","mu_pop_alr_p","eta_year_SS"),
+                "eta_year_R","mu_pop_p","eta_year_SS"),
       states = c("R","p","s_SS","S","p_HOS","q")
     ),
     
@@ -71,7 +73,7 @@ stan_pars <- function(stan_model = c("IPM_SS_np","IPM_SSiter_np","IPM_SS_pp","IP
                 "mu_MS","beta_MS","rho_MS","sigma_year_MS","sigma_MS",
                 "mu_p","sigma_pop_p","R_pop_p","sigma_p","R_p","tau_S"),
       group = c("alpha","alpha_W","alpha_H","delta_alpha","Mmax","Mmax_W","Mmax_H","delta_Mmax",
-                "eta_year_M","eta_year_MS","mu_pop_alr_p"),
+                "eta_year_M","eta_year_MS","mu_pop_p"),
       states = c("M","s_MS","p","S","q","p_HOS")
     ),
     
@@ -93,7 +95,7 @@ stan_pars <- function(stan_model = c("IPM_SS_np","IPM_SSiter_np","IPM_SS_pp","IP
                 "mu_p","sigma_pop_p","R_pop_p","sigma_p","R_p",
                 "mu_F","sigma_pop_F","sigma_F","p_D","mu_tau_S","sigma_tau_S"),
       group = c("psi","psi_W","psi_H","delta_psi","Mmax","Mmax_W","Mmax_H","delta_Mmax",
-                "eta_year_M","eta_year_MS","mu_pop_alr_p"),
+                "eta_year_M","eta_year_MS","mu_pop_p"),
       states = c("M","tau_M","s_MS","p","p_F","S","tau_S","q","q_F","q_O","p_HOS","b")
     ),
     
@@ -132,10 +134,10 @@ stan_pars <- function(stan_model = c("IPM_SS_np","IPM_SSiter_np","IPM_SS_pp","IP
   }
   
   # drop unused pars based on RRS
-  RRS_opts <- unique(gsub('(.+)_[WH]$', '\\1', grep('_[WH]$', pars_out, value = TRUE)))
+  RRS_opts <- unique(gsub('(.+)_[WH]$', '\\1', grepv('_[WH]$', pars_out)))
   not_RRS <- RRS_opts[!grepl(paste(RRS, collapse = "|"), RRS_opts)]
   RRS_hyper_opts <- intersect(RRS_opts, par_list[[stanmodel]]$hyper)
-  RRS_hyper <- grep(paste(RRS, collapse = "|"), RRS_hyper_opts, value = TRUE)
+  RRS_hyper <- grepv(paste(RRS, collapse = "|"), RRS_hyper_opts)
   drop_pars <- c(RRS, RRS_hyper, # if base param is in RRS, drop it and keep H/W versions
                  paste0(not_RRS, "_W"), paste0(not_RRS, "_H"), paste0("delta_", not_RRS),
                  paste0(ifelse(identical(RRS, "none"), "R_", "rho_"), 
@@ -143,18 +145,21 @@ stan_pars <- function(stan_model = c("IPM_SS_np","IPM_SSiter_np","IPM_SS_pp","IP
 
   # drop maximum recruitment for density-independent S-R function
   if(SR_fun %in% c("exp","DI")) 
-    drop_pars <- c(drop_pars, grep("max", pars_out, value = TRUE))
+    drop_pars <- c(drop_pars, grepv("max", pars_out))
   
   # drop unused iteroparity pars
   if(!grepl("iter", stan_model))
-    drop_pars <- c(drop_pars, grep("_SS", pars_out, value = TRUE))
+    drop_pars <- c(drop_pars, grepv("_SS", pars_out))
   
   # drop unused betas based on par_models 
-  betas <- grep("beta_", pars_out, value = TRUE)
+  betas <- grepv("beta_", pars_out)
   modeled_pars <- sapply(par_models, function(f) all.vars(f)[1])
   modeled_pars <- gsub("s_", "", modeled_pars)  # hack to deal with s_SS, s_MS
   drop_pars <- c(drop_pars, setdiff(betas, paste0("beta_", modeled_pars)))
   
+  # include hierarchical levels as names if requested
+  levs_out <- gsub("\\d+", "", names(pars_out[!pars_out %in% drop_pars]))
   pars_out <- setdiff(pars_out, drop_pars)
+  if(include_levels) pars_out <- setNames(pars_out, levs_out)
   return(pars_out)
 }

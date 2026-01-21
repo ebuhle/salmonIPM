@@ -1,7 +1,7 @@
 #' Definitions of parameters and states in a **salmonIPM** model
 #'
-#' Returns a data frame of parameters with their types, dimensions and
-#' definitions in the specified model.
+#' Returns a data frame of parameters and/or states with their definitions, 
+#' hierarchical levels, types and dimensions in the specified model.
 #'
 #' @param stan_model Character string giving the name of the model. See
 #'   [salmonIPM()] for details.
@@ -18,9 +18,10 @@
 #' @inheritParams salmonIPM
 #'
 #' @return Data frame with columns listing the parameters and/or states and
-#'   their definitions, types and dimensions.
+#'   their definitions, hierarchical levels, types and dimensions.
 #'
 #' @importFrom dplyr tibble
+#' @importFrom utils strcapture
 #'
 #' @export
 par_defs <- function(stan_model = c("IPM_SS_np","IPM_SSiter_np","IPM_SS_pp","IPM_SSiter_pp",
@@ -35,25 +36,23 @@ par_defs <- function(stan_model = c("IPM_SS_np","IPM_SSiter_np","IPM_SS_pp","IPM
   } else {
     stan_model <- match.arg(stan_model)
   }
-  pars <- stan_pars(stan_model = stan_model, pars = pars, SR_fun = SR_fun, RRS = RRS,
-                    par_models = par_models, object = object)
+  pars <- stan_pars(stan_model = stan_model, pars = pars, include_levels = TRUE,
+                    SR_fun = SR_fun, RRS = RRS, par_models = par_models, object = object)
   stanmodel <- gsub("iter", "", stan_model)  # same Stan code for iteroparity
   
   # Parse model code and extract parameter declarations
   smtext <- strsplit(stanmodels[[stanmodel]]@model_code, "\\n")[[1]]
-  pd <- data.frame(par = pars, def = NA, type = NA)
+  pd <- data.frame(par = pars, def = NA, level = names(pars), type = NA)
 
   for(.par in pars) {
-    # .+           leading space(s) and type declaration, then space before .par
+    #  *(.+)       leading space(s), capture group for type declaration, space before .par
     # (?: = .+)?   optional ")?" non-capturing group "(?:" for declaration-assignment
     # ; +.*        end of statement, one or more spaces, zero or more other chars e.g. "//?"
     # // (.+)      capture group for comment 
-    dregex <- paste0(".+ ", .par, "(?: = .+)?; +.*// (.+)")
-    pd$def[pd$par == .par] <- gsub(dregex, "\\1", grep(dregex, smtext, value = TRUE)[1])
-    #  *    leading space(s) 
-    # (.+)  capture group for type declaration, then space before .par
-    tregex <- paste0(" *(.+) ", .par, "(?: = .+)?;.+")
-    pd$type[pd$par == .par] <- gsub(tregex, "\\1", grep(tregex, smtext, value = TRUE)[1])
+    tdregex <- paste0(" *(.+) ", .par, "(?: = .+)?; +.*// (.+)")
+    tdmatch <- grepv(tdregex, smtext)[1]
+    td <- strcapture(tdregex, tdmatch, proto = list(type = character(), def = character()))
+    pd[pd$par == .par, c("type","def")] <- td
   }
   
   return(tibble(pd))
