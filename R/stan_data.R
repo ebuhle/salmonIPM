@@ -134,6 +134,7 @@ stan_data <- function(stan_model = c("IPM_SS_np","IPM_SSiter_np","IPM_SS_pp","IP
       stop("Missing observations are not allowed in fecundity data")
     
     which_H_pop <- grep("Hatchery", levels(factor(fish_data$pop)))
+    which_D_pop <- which(!1:max(pop) %in% which_H_pop)
     use_M_obs <- !is.na(M_obs) & !(M_obs == 0 & pop %in% which_H_pop)
     use_S_obs <- !is.na(S_obs) & !(S_obs == 0 & pop %in% which_H_pop)
 
@@ -143,6 +144,7 @@ stan_data <- function(stan_model = c("IPM_SS_np","IPM_SSiter_np","IPM_SS_pp","IP
            "in the sample or no sample was taken, the observed frequency is 0.")
     which_O_pop <- sapply(strsplit(colnames(n_O_obs[,-1]), "_"), 
                           function(x) as.numeric(substring(x[2], 2)))
+    which_U_pop <- which(!1:max(pop) %in% which_O_pop)
     # identify cells of n_O_obs that are structural zeros because
     # (1) a given known-origin pop did not exist in any parental brood year
     # (2) a known-origin pop did not receive any broodstock in a given year
@@ -566,6 +568,8 @@ stan_data <- function(stan_model = c("IPM_SS_np","IPM_SSiter_np","IPM_SS_pp","IP
                   M_obs = replace(M_obs, is.na(M_obs) | M_obs==0, 1),
                   N_tau_M_obs = sum(!is.na(tau_M_obs)),
                   which_tau_M_obs = as.vector(which(!is.na(tau_M_obs))),
+                  N_tau_M_fit = sum(!is.na(tau_M_obs) & !pop %in% which_H_pop),
+                  which_tau_M_fit = as.vector(which(!is.na(tau_M_obs) & !pop %in% which_H_pop)),
                   tau_M_obs = replace(tau_M_obs, is.na(tau_M_obs), 0),
                   N_upstream = sum(!is.na(downstream_trap)),
                   which_upstream = as.vector(which(!is.na(downstream_trap))),
@@ -580,6 +584,8 @@ stan_data <- function(stan_model = c("IPM_SS_np","IPM_SSiter_np","IPM_SS_pp","IP
                   S_obs = replace(S_obs, is.na(S_obs) | S_obs==0, 1),
                   N_tau_S_obs = sum(!is.na(tau_S_obs)),
                   which_tau_S_obs = as.vector(which(!is.na(tau_S_obs))),
+                  N_tau_S_fit = sum(!is.na(tau_S_obs) & !pop %in% which_O_pop),
+                  which_tau_S_fit = as.vector(which(!is.na(tau_S_obs) & !pop %in% which_O_pop)),
                   tau_S_obs = replace(tau_S_obs, is.na(tau_S_obs), 0),
                   # spawner age structure and sex ratio
                   N_age = N_age,
@@ -592,6 +598,8 @@ stan_data <- function(stan_model = c("IPM_SS_np","IPM_SSiter_np","IPM_SS_pp","IP
                   # origin composition
                   N_O_pop = N_O_pop,
                   which_O_pop = which_O_pop,
+                  N_U_pop = length(which_U_pop),
+                  which_U_pop = which_U_pop,
                   N_n_O_obs = sum(use_n_O_obs),
                   which_n_O_obs = which(as.vector(use_n_O_obs)),
                   n_O_obs = n_O_obs,
@@ -600,6 +608,8 @@ stan_data <- function(stan_model = c("IPM_SS_np","IPM_SSiter_np","IPM_SS_pp","IP
                   age_F = age_F,
                   N_H_pop = length(which_H_pop),
                   which_H_pop = which_H_pop,
+                  N_D_pop = length(which_D_pop),
+                  which_D_pop = which_D_pop,
                   N_B = sum(B_take_obs > 0),
                   which_B = as.vector(which(B_take_obs > 0)),
                   B_take_obs = B_take_obs[B_take_obs > 0],
