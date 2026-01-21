@@ -38,6 +38,8 @@ data {
   vector<lower=0>[N] M_obs;            // observed annual natural smolt abundance (not density)
   int<lower=1,upper=N> N_tau_M_obs;    // number of cases with known smolt observation error SD
   array[N_tau_M_obs] int<lower=1,upper=N> which_tau_M_obs; // cases with known smolt observation error SD
+  int<lower=1,upper=N> N_tau_M_fit;    // number of cases with smolt observation error SD to fit
+  array[N_tau_M_fit] int<lower=1,upper=N> which_tau_M_fit; // cases with smolt observation error SD to fit
   vector<lower=0>[N] tau_M_obs;        // known smolt observation error SDs
   int<lower=0,upper=N> N_upstream;     // number of smolt obs upstream of a trap in another pop
   array[N_upstream] int<lower=1,upper=N> which_upstream;  // smolt obs upstream of a trap in another pop
@@ -52,6 +54,8 @@ data {
   vector<lower=0>[N] S_obs;            // observed annual total spawner abundance (not density)
   int<lower=1,upper=N> N_tau_S_obs;    // number of cases with known spawner observation error SD
   array[N_tau_S_obs] int<lower=1,upper=N> which_tau_S_obs; // cases with known spawner observation error SD
+  int<lower=1,upper=N> N_tau_S_fit;    // number of cases with spawner observation error SD to fit
+  array[N_tau_S_fit] int<lower=1,upper=N> which_tau_S_fit; // cases with spawner observation error SD to fit
   vector<lower=0>[N] tau_S_obs;        // known spawner observation error SDs
   // spawner age structure and sex ratio
   int<lower=2> N_age;                  // number of adult age classes
@@ -64,6 +68,8 @@ data {
   // straying and origin composition
   int<lower=0,upper=max(pop)> N_O_pop;  // number of known-origin pops
   array[N_O_pop] int<lower=1,upper=max(pop)> which_O_pop; // known-origin pop IDs
+  int<lower=0,upper=max(pop)> N_U_pop;  // number of natural unknown-origin pops
+  array[N_U_pop] int<lower=1,upper=max(pop)> which_U_pop; // unknown-origin pop IDs (complement of which_O_pop)
   int<lower=1,upper=N*(1+N_O_pop)> N_n_O_obs; // number of cells in n_O_obs that are not structural zeros
   array[N_n_O_obs] int<lower=1,upper=N*(1+N_O_pop)> which_n_O_obs; // vector indices of non-structural-zero n_O_obs
   matrix<lower=0>[N,1+N_O_pop] n_O_obs;  // observed spawner origin frequencies (1st col is NOR)
@@ -72,6 +78,8 @@ data {
   vector<lower=0,upper=1>[N_age] age_F; // is age a (non)selected (0/1) by fishery?
   int<lower=0,upper=max(pop)> N_H_pop;  // number of hatchery pops
   array[N_H_pop] int<lower=1,upper=max(pop)> which_H_pop; // hatchery pop IDs
+  int<lower=0,upper=max(pop)> N_D_pop;  // number of dispersal destination (non-hatchery) pops
+  array[N_D_pop] int<lower=1,upper=max(pop)> which_D_pop; // destination pop IDs (complement of which_H_pop)
   int<lower=0,upper=N> N_B;             // number of cases with B_take > 0
   array[N_B] int<lower=1,upper=N> which_B; // cases with B_take > 0
   vector[N_B] B_take_obs;               // observed broodstock take of wild adults
@@ -84,10 +92,6 @@ transformed data {
   int<lower=1,upper=N> N_year = max(year); // number of years
   array[N_year,N_pop] int<lower=0,upper=N> year_pop_indx; // case index for a given year and pop (0 otherwise)  
   array[N] int<lower=1> pop_year;          // index of years within each pop, starting at 1
-  int<lower=0,upper=N_pop> N_D_pop = N_pop - N_H_pop;  // number of destination (non-hatchery) pops
-  array[N_D_pop] int<lower=1,upper=N_pop> which_D_pop; // destination pop IDs (complement of which_H_pop) 
-  int<lower=0,upper=N_pop> N_U_pop = N_pop - N_O_pop;  // number of natural unknown-origin pops
-  array[N_U_pop] int<lower=1,upper=N_pop> which_U_pop; // unknown-origin pop IDs (complement of which_O_pop) 
   array[N] int<lower=0,upper=1> indx_H;    // is case from a hatchery (1) or wild (0) pop?
   array[N_age] int<lower=0> ocean_ages;    // ocean ages
   int<lower=1> max_ocean_age = max_age - smolt_age; // maximum ocean age
@@ -98,8 +102,8 @@ transformed data {
   row_vector<lower=0>[N*(1+N_O_pop)] n_O_obs_rvec = to_row_vector(n_O_obs); // n_O_obs as row vector
   real mu_mu_Mmax = max(log(M_obs[which_M_obs] ./ A[which_M_obs])); // prior mean of mu_Mmax
   int<lower=0,upper=1> any_RRS = max(RRS); // does either S-R parameter differ by W vs. H?
-  real sigma_mu_Mmax = sd(log(M_obs[which_M_obs])); // prior SD of mu_Mmax
-  real mu_M_init = mean(log(M_obs[which_M_obs]));  // prior log-mean of smolt abundance in years 1:smolt_age
+  real sigma_mu_Mmax = sd(log(M_obs[which_M_obs]));  // prior SD of mu_Mmax
+  real mu_M_init = mean(log(M_obs[which_M_obs]));    // prior log-mean of smolt abundance in years 1:smolt_age
   real sigma_M_init = 2*sd(log(M_obs[which_M_obs])); // prior log-SD of smolt abundance in years 1:smolt_age
   vector[max_ocean_age*N_pop] mu_S_init;   // prior mean of total spawner abundance in years 1:max_ocean_age
   real sigma_S_init = sd(log(S_obs[which_S_obs])); // prior log-SD of spawner abundance in years 1:max_ocean_age
@@ -108,32 +112,6 @@ transformed data {
   row_vector[3] prior_mu_psi_b;            // prior b for hyper-mean egg-to-smolt survival (all/W/H)
   row_vector[3] prior_mu_Mmax_mean;        // prior means for hyper-mean log maximum recruitment (all/W/H)
   row_vector[3] prior_mu_Mmax_sd;          // prior SDs for hyper-mean log maximum recruitment (all/W/H)
-  
-  // Destination pop IDs (non-hatchery, have natural recruitment incl strays)
-  {
-    int jj = 1;
-    for(j in 1:N_pop) 
-    {
-      if(max(veq(which_H_pop, j)) == 0)
-      {
-        which_D_pop[jj] = j;
-        jj = jj + 1;
-      }
-    }
-  }
-  
-  // Natural unknown-origin pop IDs
-  {
-    int jj = 1;
-    for(j in 1:N_pop) 
-    {
-      if(max(veq(which_O_pop, j)) == 0)
-      {
-        which_U_pop[jj] = j;
-        jj = jj + 1;
-      }
-    }
-  }
 
   // Indices and array-based calculations
   for(i in 1:N) indx_H[i] = max(veq(which_H_pop, pop[i]));
@@ -164,10 +142,10 @@ transformed data {
     {
       int ii = (j - 1)*max_ocean_age + i; // index into S_init, q_init
       
-      // S_init prior mean that scales observed log-mean by fraction of orphan age classes
+      // S_init prior mean scales observed log-mean by fraction of orphan age classes
       mu_S_init[ii] = mean(log(S_obs[which_S_obs])) + log(N_orphan_age) - log(N_age);
       
-      // prior on q_init that implies q_orphan ~ Dir(1)
+      // prior on q_init implies q_orphan ~ Dir(1)
       mu_q_init[,ii] = append_row(rep_vector(1.0/N_amalg_age, N_amalg_age), 
                                   rep_vector(1, N_orphan_age - 1));
     }
@@ -555,8 +533,8 @@ model {
   mu_tau_S ~ normal(0,1); // half-normal
   sigma_tau_S ~ normal(0,5);
   // known SDs
-  tau_M_obs[which_tau_M_obs] ~ lognormal(log(mu_tau_M), sigma_tau_M);
-  tau_S_obs[which_tau_S_obs] ~ lognormal(log(mu_tau_S), sigma_tau_S);
+  tau_M_obs[which_tau_M_fit] ~ lognormal(log(mu_tau_M), sigma_tau_M);
+  tau_S_obs[which_tau_S_fit] ~ lognormal(log(mu_tau_S), sigma_tau_S);
   // unknown SDs
   tau_M_z ~ std_normal(); // tau_M[-which_tau_M_obs] ~ lognormal(log(mu_tau_M), sigma_tau_M);
   tau_S_z ~ std_normal(); // tau_S[-which_tau_S_obs] ~ lognormal(log(mu_tau_S), sigma_tau_S);
@@ -564,10 +542,8 @@ model {
   // Observation model
   E_obs ~ normal(mu_E[a_E], sigma_E[a_E]) T[0,]; // observed fecundity: zero-truncated normal
   for(i in 1:N_upstream) M_downstream[downstream_trap[i]] += M[which_upstream[i]];
-  // M_downstream[which_M_obs] ~ lognormal(log(M_obs[which_M_obs]), tau_M[which_M_obs]); // prior on smolts
   M_obs[which_M_obs] ~ lognormal(log(M_downstream[which_M_obs]), tau_M[which_M_obs]); // likelihood of smolts
-  // S[which_S_obs] ~ lognormal(log(S_obs[which_S_obs]), tau_S[which_S_obs]); // prior on spawners
-  S_obs[which_S_obs] ~ lognormal(log(S[which_S_obs]), tau_S[which_S_obs]); // likelihood of spawners
+  S_obs[which_S_obs] ~ lognormal(log(S[which_S_obs]), tau_S[which_S_obs]);            // likelihood of spawners
   target += sum(n_age_obs .* log(q)); // observed age frequencies: n_age_obs[i] ~ multinomial(q[i])
   n_F_obs ~ binomial(n_MF_obs, q_F);  // observed sex frequencies
   // observed origin frequencies: n_O_obs[i,] ~ multinomial(q_O[i,])
@@ -579,6 +555,7 @@ generated quantities {
   vector[RRS[1]*N_pop] delta_psi;  // H vs. W discount in logit density-independent egg-smolt survival
   real delta_mu_Mmax;           // H vs. W discount in hyper-mean log maximum smolt recruitment
   vector[RRS[2]*N_pop] delta_Mmax; // H vs. W discount in log maximum smolt recruitment
+  matrix[N_pop,N_age] mu_pop_p; // population mean age distributions
   corr_matrix[N_age-1] R_pop_p; // among-pop correlation matrix of mean log-ratio age distns 
   corr_matrix[N_age-1] R_p;     // correlation matrix of within-pop cohort log-ratio age distns 
   vector[N] p_HOS = rep_vector(0,N); // true proportion hatchery-origin spawners
@@ -599,6 +576,12 @@ generated quantities {
   delta_psi = logit(psi_H) - logit(psi_W);
   delta_mu_Mmax = mu_Mmax_H - mu_Mmax_W;
   delta_Mmax = log(Mmax_H) - log(Mmax_W);
+  
+  // Population mean age distributions
+  {
+    matrix[N_pop,N_age] exp_pop_alr_p = append_col(exp(mu_pop_alr_p), rep_vector(1,N_pop));
+    mu_pop_p = diag_pre_multiply(inv(row_sums(exp_pop_alr_p)), exp_pop_alr_p);
+  }
 
   // Correlation matrices of log-ratio conditional age-at-return distributions
   R_pop_p = multiply_lower_tri_self_transpose(L_pop_p);
@@ -607,11 +590,9 @@ generated quantities {
   // Pointwise observation log-likelihoods
   for(i in 1:N_upstream) M_downstream[downstream_trap[i]] += M[which_upstream[i]];
   for(i in 1:N_M_obs)
-    LL_M_obs[which_M_obs[i]] = lognormal_lpdf(M[which_M_obs[i]] | log(M_obs[which_M_obs[i]]), tau_M[which_M_obs[i]]); 
-    // LL_M_obs[which_M_obs[i]] = lognormal_lpdf(M_obs[which_M_obs[i]] | log(M[which_M_obs[i]]), tau_M[which_M_obs[i]]); 
+    LL_M_obs[which_M_obs[i]] = lognormal_lpdf(M_obs[which_M_obs[i]] | log(M[which_M_obs[i]]), tau_M[which_M_obs[i]]);
   for(i in 1:N_S_obs)
-    LL_S_obs[which_S_obs[i]] = lognormal_lpdf(S[which_S_obs[i]] | log(S_obs[which_S_obs[i]]), tau_S[which_S_obs[i]]); 
-    // LL_S_obs[which_S_obs[i]] = lognormal_lpdf(S_obs[which_S_obs[i]] | log(S[which_S_obs[i]]), tau_S[which_S_obs[i]]); 
+    LL_S_obs[which_S_obs[i]] = lognormal_lpdf(S_obs[which_S_obs[i]] | log(S[which_S_obs[i]]), tau_S[which_S_obs[i]]);
   LL_n_age_obs = row_sums(n_age_obs .* log(q));
   {
     vector[N*(1+N_O_pop)] q_O_vec = to_vector(q_O);

@@ -64,10 +64,12 @@ transformed data {
   real sigma_S_init = sd(log(S_obs[which_S_obs])); // prior log-SD of spawner abundance in years 1:max_age
   matrix[N_age,max_age*N_pop] mu_q_init;   // prior counts of maiden age distributions in years 1:max_age
 
+  // Indices and array-based calculations
   for(a in 1:N_age) ages[a] = max_age - N_age + a;
   min_age = min(ages);  
   for(i in 1:N_H) n_HW_obs[i] = n_H_obs[i] + n_W_obs[i];
   
+  // Years within each pop starting at 1 (determines when to use initial values)
   pop_year[1] = 1;
   for(i in 1:N)
   {
@@ -75,6 +77,7 @@ transformed data {
     else pop_year[i] = pop_year[i-1] + 1;
   }
   
+  // Priors on S_init, q_init accounting for amalgamation of orphan age classes
   for(i in 1:max_age)
   {
     int N_orphan_age = N_age - max(i - min_age, 0); // number of orphan (maiden) age classes
@@ -87,7 +90,7 @@ transformed data {
       // S_init prior mean scales observed log-mean by fraction of orphan maiden age classes
       mu_S_init[ii] = mean(log(S_obs[which_S_obs])) + log(N_orphan_age) - log(N_age);
       
-      // prior on q_init that implies q_orphan ~ Dir(1)
+      // prior on q_init implies q_orphan ~ Dir(1)
       mu_q_init[,ii] = append_row(rep_vector(1.0/N_amalg_age, N_amalg_age), 
                                   rep_vector(1, N_orphan_age - 1));
     }
@@ -315,8 +318,8 @@ model {
   mu_p ~ dirichlet(prior_mu_p);
   to_vector(sigma_p) ~ normal(0,3);
   for(j in 1:N_pop)
-    L_p[j] ~ lkj_corr_cholesky(1);
-  // age probs logistic MVN: 
+    L_p[j] ~ lkj_corr_cholesky(1); // R_p[j] ~ lkj_corr(1)
+  // age probs logistic MVN
   // alr_p[i,] ~ MVN(mu_alr_p[pop[i],], D*R_p*D), where D = diag_matrix(sigma_p)
   to_vector(zeta_p) ~ std_normal();
 
@@ -352,12 +355,15 @@ generated quantities {
   vector[N] LL_n_age_obs;           // pointwise log-likelihood of wild spawner age age frequencies
   vector[N] LL;                     // total pointwise log-likelihood
 
+  // H vs. W discounts
   delta_alpha = log(alpha_H) - log(alpha_W);
   delta_Rmax = log(Rmax_H) - log(Rmax_W);
 
+  // Correlation matrices of log-ratio conditional age-at-return distributions
   for(j in 1:N_pop)
     R_p[j] = multiply_lower_tri_self_transpose(L_p[j]);
 
+  // Pointwise observation log-likelihoods
   LL_S_obs = rep_vector(0,N);
   for(i in 1:N_S_obs)
     LL_S_obs[which_S_obs[i]] = lognormal_lpdf(S_obs[which_S_obs[i]] | log(S[which_S_obs[i]]), tau[pop[which_S_obs]]);

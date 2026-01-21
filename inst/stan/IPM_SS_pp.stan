@@ -6,6 +6,7 @@ functions {
   #include /include/rsub.stan
   #include /include/which.stan
   #include /include/mat_lmult.stan
+  #include /include/row_sums.stan
 }
 
 data {
@@ -66,8 +67,6 @@ transformed data {
   array[N] int<lower=1> pop_year;          // index of years within each pop, starting at 1
   array[N_age] int<lower=2> ages;          // (maiden) adult ages
   int<lower=1> min_age;                    // minimum adult age
-  vector[N_age] ones_N_age = rep_vector(1,N_age); // for rowsums of p matrix 
-  vector[N] ones_N = rep_vector(1,N);      // for elementwise inverse of rowsums 
   array[N_H] int<lower=0> n_HW_obs;        // total sample sizes for H/W frequencies
   vector[max_age*N_pop] mu_S_init;         // prior mean of total spawner abundance in years 1:max_age
   real sigma_S_init = sd(log(S_obs[which_S_obs])); // prior log-SD of spawner abundance in years 1:max_age
@@ -79,10 +78,12 @@ transformed data {
   row_vector[3] prior_mu_Rmax_mean;        // prior means for hyper-mean log maximum recruitment (all/W/H)
   row_vector[3] prior_mu_Rmax_sd;          // prior SDs for hyper-mean log maximum recruitment (all/W/H)
   
+  // Indices and array-based calculations
   for(a in 1:N_age) ages[a] = max_age - N_age + a;
   min_age = min(ages);  
   for(i in 1:N_H) n_HW_obs[i] = n_H_obs[i] + n_W_obs[i];
 
+  // Years within each pop starting at 1 (determines when to use initial values)
   pop_year[1] = 1;
   for(i in 1:N)
   {
@@ -90,6 +91,7 @@ transformed data {
     else pop_year[i] = pop_year[i-1] + 1;
   }
   
+  // Priors on S_init, q_init accounting for amalgamation of orphan age classes
   for(i in 1:max_age)
   {
     int N_orphan_age = N_age - max(i - min_age, 0); // number of orphan (maiden) age classes
@@ -99,15 +101,16 @@ transformed data {
     {
       int ii = (j - 1)*max_age + i; // index into S_init, q_init
       
-      // S_init prior mean that scales observed log-mean by fraction of orphan (maiden) age classes
+      // S_init prior mean scales observed log-mean by fraction of orphan (maiden) age classes
       mu_S_init[ii] = mean(log(S_obs[which_S_obs])) + log(N_orphan_age) - log(N_age);
       
-      // prior on q_init that implies q_orphan ~ Dir(1)
+      // prior on q_init implies q_orphan ~ Dir(1)
       mu_q_init[,ii] = append_row(rep_vector(1.0/N_amalg_age, N_amalg_age), 
                                   rep_vector(1, N_orphan_age - 1));
     }
   }
   
+  // Extract scalar prior parameters into vectors for efficient sampling statements
   prior_mu_alpha_mean = [prior_mu_alpha[1], prior_mu_alpha_W[1], prior_mu_alpha_H[1]];
   prior_mu_alpha_sd = [prior_mu_alpha[2], prior_mu_alpha_W[2], prior_mu_alpha_H[2]];
   prior_mu_Rmax_mean = [prior_mu_Rmax[1], prior_mu_Rmax_W[1], prior_mu_Rmax_H[1]];
@@ -235,8 +238,8 @@ transformed parameters {
 
   // AR(1) model for recruitment anomalies
   eta_year_R[1] = zeta_year_R[1] * sigma_year_R / sqrt(1 - rho_R^2);
-  for(i in 2:N_year)
-    eta_year_R[i] = rho_R*eta_year_R[i-1] + zeta_year_R[i]*sigma_year_R;
+  for(t in 2:N_year)
+    eta_year_R[t] = rho_R*eta_year_R[t-1] + zeta_year_R[t]*sigma_year_R;
   // constrain "fitted" anomalies to sum to 0
   eta_year_R = eta_year_R - mean(head(eta_year_R, N_year));
   
@@ -244,8 +247,8 @@ transformed parameters {
   if(iter)
   {
     eta_year_SS[1] = zeta_year_SS[1] * sigma_year_SS[1] / sqrt(1 - rho_SS[1]^2);
-    for(i in 2:N_year)
-      eta_year_SS[i] = rho_SS[1]*eta_year_SS[i-1] + zeta_year_SS[i]*sigma_year_SS[1];
+    for(t in 2:N_year)
+      eta_year_SS[t] = rho_SS[1]*eta_year_SS[t-1] + zeta_year_SS[t]*sigma_year_SS[1];
     // constrain annual anomalies to sum to 0
     eta_year_SS = eta_year_SS - mean(eta_year_SS);
     // annual population-specific kelt survival
@@ -258,8 +261,8 @@ transformed parameters {
   // Inverse log-ratio (softmax) transform of cohort (maiden) age distn
   {
     matrix[N,N_age-1] alr_p = mu_pop_alr_p[pop,] + diag_pre_multiply(sigma_p, L_p * zeta_p')';
-    matrix[N,N_age] exp_alr_p = append_col(exp(alr_p), ones_N);
-    p = diag_pre_multiply(ones_N ./ (exp_alr_p * ones_N_age), exp_alr_p);
+    matrix[N,N_age] exp_alr_p = append_col(exp(alr_p), rep_vector(1,N));
+    p = diag_pre_multiply(inv(row_sums(exp_alr_p)), exp_alr_p);
   }
   
   // Pad p_HOS and B_rate
@@ -403,8 +406,8 @@ model {
   mu_p ~ dirichlet(prior_mu_p);
   to_vector(sigma_pop_p) ~ normal(0,3);
   to_vector(sigma_p) ~ normal(0,3); 
-  L_pop_p ~ lkj_corr_cholesky(1);
-  L_p ~ lkj_corr_cholesky(1);
+  L_pop_p ~ lkj_corr_cholesky(1); // R_pop_p ~ lkj_corr(1)
+  L_p ~ lkj_corr_cholesky(1);     // R_p ~ lkj_corr(1)
   // pop mean age probs logistic MVN: 
   // mu_pop_alr_p[i,] ~ MVN(mu_alr_p, D*R_pop_p*D), where D = diag_matrix(sigma_pop_p)
   to_vector(zeta_pop_p) ~ std_normal();
@@ -450,6 +453,7 @@ generated quantities {
   vector[RRS[2]*N_pop] delta_Rmax;  // H vs. W discount in log maximum recruitment
   real rho_alphaRmax;               // correlation between log(alpha) and log(Rmax)
   corr_matrix[N_SR] R_alphaRmax;    // correlation among log alpha, Rmax (all/W/H)
+  matrix[N_pop,N_age] mu_pop_p;     // population mean age distributions
   corr_matrix[N_age-1] R_pop_p;     // among-pop correlation matrix of mean log-ratio age distns 
   corr_matrix[N_age-1] R_p;         // correlation matrix of within-pop cohort log-ratio age distns 
   vector[N] LL_S_obs;               // pointwise log-likelihood of total spawners
@@ -457,17 +461,27 @@ generated quantities {
   vector[N] LL_n_age_obs;           // pointwise log-likelihood of wild age frequencies
   vector[N] LL;                     // total pointwise log-likelihood                              
   
+  // H vs. W discounts
   delta_mu_alpha = mu_alpha_H - mu_alpha_W;
   delta_alpha = log(alpha_H) - log(alpha_W);
   delta_mu_Rmax = mu_Rmax_H - mu_Rmax_W;
   delta_Rmax = log(Rmax_H) - log(Rmax_W);
   
+  // Correlation matrix of log([alpha, alpha_W, alpha_H, Rmax, Rmax_W, Rmax_H])
   R_alphaRmax = multiply_lower_tri_self_transpose(L_alphaRmax);
   if(!max(RRS)) rho_alphaRmax = R_alphaRmax[2,1];
   
+  // Population mean age distributions
+  {
+    matrix[N_pop,N_age] exp_pop_alr_p = append_col(exp(mu_pop_alr_p), rep_vector(1,N_pop));
+    mu_pop_p = diag_pre_multiply(inv(row_sums(exp_pop_alr_p)), exp_pop_alr_p);
+  }
+
+  // Correlation matrices of log-ratio conditional age-at-return distributions
   R_pop_p = multiply_lower_tri_self_transpose(L_pop_p);
   R_p = multiply_lower_tri_self_transpose(L_p);
   
+  // Pointwise observation log-likelihoods
   LL_S_obs = rep_vector(0,N);
   for(i in 1:N_S_obs)
     LL_S_obs[which_S_obs[i]] = lognormal_lpdf(S_obs[which_S_obs[i]] | log(S[which_S_obs[i]]), tau); 

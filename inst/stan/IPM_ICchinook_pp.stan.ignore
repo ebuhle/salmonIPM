@@ -6,6 +6,7 @@ functions {
   #include /include/rsub.stan
   #include /include/which.stan
   #include /include/mat_lmult.stan
+  #include /include/row_sums.stan
 }
 
 data {
@@ -85,14 +86,13 @@ transformed data {
   int<lower=1> max_ocean_age = max_age - smolt_age; // maximum ocean age
   int<lower=1> min_ocean_age = max_ocean_age - N_age + 1; // minimum ocean age
   int<lower=2> ages[N_age];               // adult ages
-  vector[N_age] ones_N_age = rep_vector(1,N_age); // for rowsums of p matrix 
-  vector[N] ones_N = rep_vector(1,N);     // for elementwise inverse of rowsums 
   int<lower=0> n_HW_obs[N_H];             // total sample sizes for H/W frequencies
-  int<lower=0,upper=N> fwd_init_indx[N_fwd,N_age]; // links "fitted" brood years to recruits in forward sims
+  // int<lower=0,upper=N> fwd_init_indx[N_fwd,N_age]; // links "fitted" brood years to recruits in forward sims
   vector[max_age*N_pop] mu_S_init;        // prior mean of total spawner abundance in years 1:max_age
   real sigma_S_init = sd(log(S_obs[which_S_obs])); // prior log-SD of spawner abundance in years 1:max_ocean_age
   matrix[N_age,max_age*N_pop] mu_q_init;  // prior counts of wild spawner age distns in years 1:max_age
   
+  // Indices and array-based calculations
   N_year_all = max(append_array(year, year_fwd));
   for(a in min_ocean_age:max_ocean_age)
   {
@@ -101,6 +101,7 @@ transformed data {
   }
   for(i in 1:N_H) n_HW_obs[i] = n_H_obs[i] + n_W_obs[i];
   
+  // Years within each pop starting at 1 (determines when to use initial values)
   pop_year[1] = 1;
   for(i in 1:N)
   {
@@ -110,16 +111,17 @@ transformed data {
       pop_year[i] = pop_year[i-1] + 1;
   }
   
-  fwd_init_indx = rep_array(0, N_fwd, N_age);
-  for(i in 1:N_fwd)
-  {
-    for(a in 1:N_age)
-    {
-      if(year_fwd[i] - ages[a] < min(rsub(year_fwd, veq(pop_fwd, pop_fwd[i]))))
-        fwd_init_indx[i,a] = which(vand(veq(pop, pop_fwd[i]), veq(year, year_fwd[i] - ages[a])));
-    }
-  }
+  // fwd_init_indx = rep_array(0, N_fwd, N_age);
+  // for(i in 1:N_fwd)
+  // {
+  //   for(a in 1:N_age)
+  //   {
+  //     if(year_fwd[i] - ages[a] < min(rsub(year_fwd, veq(pop_fwd, pop_fwd[i]))))
+  //       fwd_init_indx[i,a] = which(vand(veq(pop, pop_fwd[i]), veq(year, year_fwd[i] - ages[a])));
+  //   }
+  // }
   
+  // Priors on S_init, q_init accounting for amalgamation of orphan age classes
   for(i in 1:max_ocean_age)
   {
     int N_orphan_age = N_age - max(i - min_ocean_age, 0); // number of orphan age classes
@@ -129,10 +131,10 @@ transformed data {
     {
       int ii = (j - 1)*max_ocean_age + i; // index into S_init, q_init
 
-      // S_init prior mean that scales observed log-mean by fraction of orphan age classes
+      // S_init prior mean scales observed log-mean by fraction of orphan age classes
       mu_S_init[ii] = mean(log(S_obs[which_S_obs])) + log(N_orphan_age) - log(N_age);
       
-      // prior on q_init that implies q_orphan ~ Dir(1)
+      // prior on q_init implies q_orphan ~ Dir(1)
       mu_q_init[,ii] = append_row(rep_vector(1.0/N_amalg_age, N_amalg_age), 
                                   rep_vector(1, N_orphan_age - 1));
     }
@@ -242,11 +244,11 @@ transformed parameters {
   epsilon_D[1] = zeta_D[1] * sigma_D / sqrt(1 - rho_D^2); 
   epsilon_SAR[1] = zeta_SAR[1] * sigma_SAR / sqrt(1 - rho_SAR^2); 
   epsilon_U[1] = zeta_U[1] * sigma_U / sqrt(1 - rho_U^2);
-  for(i in 2:N_year_all)
+  for(t in 2:N_year_all)
   {
-    epsilon_D[i] = rho_D * epsilon_D[i-1] + zeta_D[i] * sigma_D;
-    epsilon_SAR[i] = rho_SAR * epsilon_SAR[i-1] + zeta_SAR[i] * sigma_SAR;
-    epsilon_U[i] = rho_U * epsilon_U[i-1] + zeta_U[i] * sigma_U;
+    epsilon_D[t] = rho_D * epsilon_D[t-1] + zeta_D[t] * sigma_D;
+    epsilon_SAR[t] = rho_SAR * epsilon_SAR[t-1] + zeta_SAR[t] * sigma_SAR;
+    epsilon_U[t] = rho_U * epsilon_U[t-1] + zeta_U[t] * sigma_U;
   }
   // constrain process errors to sum to 0 (columns of X should be centered)
   s_D = inv_logit(mu_D + mat_lmult(X_D,beta_D) + epsilon_D - mean(epsilon_D[1:N_year]));
@@ -265,8 +267,8 @@ transformed parameters {
   // Inverse log-ratio (softmax) transform of cohort age distn
   {
     matrix[N,N_age-1] alr_p = mu_pop_alr_p[pop,] + diag_pre_multiply(sigma_p, L_p * zeta_p')';
-    matrix[N,N_age] exp_alr_p = append_col(exp(alr_p), ones_N);
-    p = diag_pre_multiply(ones_N ./ (exp_alr_p * ones_N_age), exp_alr_p);
+    matrix[N,N_age] exp_alr_p = append_col(exp(alr_p), rep_vector(1,N));
+    p = diag_pre_multiply(inv(row_sums(exp_alr_p)), exp_alr_p);
   }
   
   // Calculate true total wild and hatchery spawners and spawner age distribution
@@ -318,7 +320,8 @@ transformed parameters {
     q[i,] = S_W_a/S_W[i];
 
     // Smolt production from brood year i
-    M_hat[i] = SR(SR_fun, alpha_Xbeta[i], Mmax_Xbeta[i], S[i], A[i]);
+    M_hat[i] = SR(SR_fun, {0, 0}, alpha_Xbeta[i], 0, 0, Mmax_Xbeta[i], 0, 0,
+                  S[i], 0, 0, A[i]);
     M0[i] = M_hat[i] * exp(dot_product(X_M[i], beta_M) + epsilon_M[i]); 
   }
 }
@@ -369,11 +372,11 @@ model {
   mu_p ~ dirichlet(prior_mu_p);
   to_vector(sigma_pop_p) ~ normal(0,3);
   to_vector(sigma_p) ~ normal(0,3);
-  L_pop_p ~ lkj_corr_cholesky(1);
-  L_p ~ lkj_corr_cholesky(1);
+  L_pop_p ~ lkj_corr_cholesky(1); // R_pop_p ~ lkj_corr(1)
+  L_p ~ lkj_corr_cholesky(1);     // R_p ~ lkj_corr(1)
   // mu_pop_alr_p[i,] ~ MVN(mu_alr_p,D*R_pop_p*D), where D = diag_matrix(sigma_pop_p)
   to_vector(zeta_pop_p) ~ std_normal();
-  // age probs logistic MVN: 
+  // age probs logistic MVN
   // alr_p[i,] ~ MVN(mu_pop_alr_p[pop[i],], D*R_p*D), 
   // where D = diag_matrix(sigma_p)
   to_vector(zeta_p) ~ std_normal();
@@ -457,6 +460,7 @@ generated quantities {
   //   R_fwd[i] = lognormal_rng(log(R_hat_fwd[i]) + phi[year_fwd[i]], sigma);
   // }
   
+  // Pointwise observation log-likelihoods
   LL_S_obs = rep_vector(0,N);
   for(i in 1:N_S_obs)
     LL_S_obs[which_S_obs[i]] = lognormal_lpdf(S_obs[which_S_obs[i]] | log(S[which_S_obs[i]]), tau_S); 

@@ -83,6 +83,7 @@ transformed data {
   real sigma_S_init = sd(log(S_obs[which_S_obs])); // prior log-SD of spawner abundance in years 1:max_MSage
   matrix[N_GRage,max_MSage*N_pop] mu_q_GR_init; // prior counts of wild spawner age distns in years 1:max_MSage
   
+  // Years within each pop starting at 1 (determines when to use initial values)
   pop_year[1] = 1;
   for(i in 1:N)
   {
@@ -92,8 +93,10 @@ transformed data {
       pop_year[i] = pop_year[i-1] + 1;
   }
   
+  // Array-based calculations 
   for(i in 1:N_H) n_HW_obs[i] = n_H_obs[i] + n_W_obs[i];
 
+  // Priors on M_init, q_M_init accounting for amalgamation of orphan smolt age classes
   for(i in 1:max_Mage)
   {
     int N_orphan_Mage = N_Mage - max(i - min_Mage, 0); // number of orphan smolt age classes
@@ -103,15 +106,16 @@ transformed data {
     {
       int ii = (j - 1)*max_Mage + i; // index into M_init, q_M_init
 
-      // M_init prior mean that scales observed log-mean by fraction of orphan age classes
+      // M_init prior mean scales observed log-mean by fraction of orphan age classes
       mu_M_init[ii] = mean(log(M_obs[which_M_obs])) + log(N_orphan_Mage) - log(N_Mage);
 
-      // prior on q_M_init that implies q_M_orphan ~ Dir(1)
+      // prior on q_M_init implies q_M_orphan ~ Dir(1)
       mu_q_M_init[,ii] = append_row(rep_vector(1.0/N_amalg_Mage, N_amalg_Mage), 
                                     rep_vector(1, N_orphan_Mage - 1));
     }
   }
   
+  // Priors on S_init, q_GR_init accounting for amalgamation of orphan ocean-age classes
   for(i in 1:max_MSage)
   {
     int N_orphan_MSage = N_MSage - max(i - min_MSage, 0); // number of orphan ocean-age classes
@@ -121,10 +125,10 @@ transformed data {
     {
       int ii = (j - 1)*max_MSage + i; // index into S_init, q_GR_init
       
-      // S_init prior mean that scales observed log-mean by fraction of orphan age classes
+      // S_init prior mean scales observed log-mean by fraction of orphan age classes
       mu_S_init[ii] = mean(log(S_obs[which_S_obs])) + log(N_orphan_MSage) - log(N_MSage);
 
-      // prior on q_GR_init that implies q_GR_orphan ~ Dir(1)
+      // prior on q_GR_init implies q_GR_orphan ~ Dir(1)
       mu_q_GR_init[,ii] = rep_vec(append_row(rep_vector(1.0/N_amalg_MSage, N_amalg_MSage), 
                                                         rep_vector(1, N_orphan_MSage - 1)), N_Mage);
     }
@@ -383,7 +387,7 @@ model {
   // smolt age structure
   to_vector(sigma_p_M) ~ normal(0,3);
   for(j in 1:N_pop)
-    L_p_M[j] ~ lkj_corr_cholesky(1);
+    L_p_M[j] ~ lkj_corr_cholesky(1); // R_p_M[j] ~ lkj_corr(1)
   // smolt age probs logistic MVN: 
   // alr(p_M[i,]) ~ MVN(mu_alr_p_M[pop[i],], D*R_p_M*D), where D = diag_matrix(sigma_p_M[pop[i],])
   to_vector(zeta_p_M) ~ std_normal();
@@ -393,15 +397,15 @@ model {
   to_vector(sigma_MS) ~ normal(0,3);
   to_vector(rho_MS) ~ gnormal(0,0.85,20); // mildly regularize rho to ensure stationarity
   for(j in 1:N_pop)
-    L_MS[j] ~ lkj_corr_cholesky(1);
-  to_vector(zeta_MS) ~ std_normal();   // SAR: logit(s_MS) ~ normal(logit(s_MS_hat), sigma_MS)
+    L_MS[j] ~ lkj_corr_cholesky(1);  // R_MS[j] ~ lkj_corr(1)
+  to_vector(zeta_MS) ~ std_normal(); // SAR: logit(s_MS) ~ normal(logit(s_MS_hat), sigma_MS)
 
   // ocean age structure
   for(j in 1:N_pop)
   {
     for(a in 1:N_Mage)
       sigma_p_MS[j,a] ~ normal(0,3);
-    L_p_MS[j] ~ lkj_corr_cholesky(1);
+    L_p_MS[j] ~ lkj_corr_cholesky(1); // R_p_MS[j] ~ lkj_corr(1)
   }
   // ocean age probs logistic MVN: 
   // alr(p_MS[i,]) ~ MVN(mu_alr_p_MS[pop[i],,], D*R_p_MS*D), where D = diag_matrix(sigma_p_MS[pop[i],,])
@@ -463,9 +467,11 @@ generated quantities {
   vector[N_H] LL_n_H_obs;    // pointwise log-likelihood of hatchery vs. wild frequencies
   vector[N] LL;              // total pointwise log-likelihood                              
 
+  // H vs. W discounts
   delta_alpha = log(alpha_H) - log(alpha_W);
   delta_Mmax = log(Mmax_H) - log(Mmax_W);
   
+  // Correlation matrices 
   for(j in 1:N_pop)
   {
     R_p_M[j] = multiply_lower_tri_self_transpose(L_p_M[j]);
@@ -473,6 +479,7 @@ generated quantities {
     R_p_MS[j] = multiply_lower_tri_self_transpose(L_p_MS[j]);
   }
   
+  // Pointwise observation log-likelihoods
   LL_M_obs = rep_vector(0,N);
   for(i in 1:N_M_obs)
     LL_M_obs[which_M_obs[i]] = lognormal_lpdf(M_obs[which_M_obs[i]] | log(M[which_M_obs[i]]), tau_M); 
