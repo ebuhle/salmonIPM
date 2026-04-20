@@ -42,8 +42,7 @@
 #'   be the names of the population-specific parameters, **not** their
 #'   hyper-means. For example, if `life_cycle %in% c("SS","SSiter")`, the
 #'   options are `"none"` (the default), `"alpha"`, `"Rmax"`, or
-#'   `c("alpha","Rmax")`. Currently `RRS` is only implemented for `pool_pops ==
-#'   FALSE`.
+#'   `c("alpha","Rmax")`.
 #' @param par_models  Optional list of two-sided formulas of the form `theta ~
 #'   x1 + ... + xK`, where `theta` is a (hyper)parameter or state in the model
 #'   specified by `stan_model` that accepts covariates (see **Details** for
@@ -294,8 +293,7 @@
 #' @encoding UTF-8
 
 salmonIPM <- function(stan_model = paste(model, life_cycle, ifelse(pool_pops, "pp", "np"), sep = "_"), 
-                      model = c("IPM","RR"), 
-                      life_cycle = c("SS","SSiter","SMS","SMaS","LCRchum"), 
+                      model = c("IPM","RR"), life_cycle = c("SS","SSiter","SMS","SMaS","LCRchum"), 
                       ages = NULL, pool_pops = nlevels(factor(fish_data$pop)) > 1, 
                       SR_fun = c("BH","B-H","bh","b-h","Ricker","ricker","exp"), RRS = "none", 
                       par_models = NULL, center = TRUE, scale = TRUE, 

@@ -74,7 +74,7 @@ stan_data <- function(stan_model = c("IPM_SS_np","IPM_SSiter_np","IPM_SS_pp","IP
                       par_models = par_models)
   X <- par_model_matrix(par_models = par_models, fish_data = fish_data, 
                         center = center, scale = scale)
-
+  
   # Age of fixed subadult stages
   if(!life_cycle %in% c("SS","SSiter","SMaS") & (any(is.na(ages)) | is.null(ages)))
     stop("Multi-stage models must specify age for all fixed-age subadult stages")
@@ -121,7 +121,7 @@ stan_data <- function(stan_model = c("IPM_SS_np","IPM_SSiter_np","IPM_SS_pp","IP
     max_age <- max(as.numeric(cregex(colnames(n_age_obs), "\\d+"))) - 
       ifelse(life_cycle == "SSiter", 1, 0)
   }
-
+  
   # Origin-frequency, sex-frequency, and fecundity data
   # Conditional broodstock transfer probabilities
   if(life_cycle == "LCRchum") {
@@ -137,7 +137,7 @@ stan_data <- function(stan_model = c("IPM_SS_np","IPM_SSiter_np","IPM_SS_pp","IP
     which_D_pop <- which(!1:max(pop) %in% which_H_pop)
     use_M_obs <- !is.na(M_obs) & !(M_obs == 0 & pop %in% which_H_pop)
     use_S_obs <- !is.na(S_obs) & !(S_obs == 0 & pop %in% which_H_pop)
-
+    
     n_O_obs <- as.matrix(fish_data[, grep("n_O", names(fish_data))])
     if(any(is.na(n_O_obs))) 
       stop("NA found in compositional data (n_O_obs). If an origin was not seen ",
@@ -145,6 +145,7 @@ stan_data <- function(stan_model = c("IPM_SS_np","IPM_SSiter_np","IPM_SS_pp","IP
     which_O_pop <- sapply(strsplit(colnames(n_O_obs[,-1]), "_"), 
                           function(x) as.numeric(substring(x[2], 2)))
     which_U_pop <- which(!1:max(pop) %in% which_O_pop)
+    
     # identify cells of n_O_obs that are structural zeros because
     # (1) a given known-origin pop did not exist in any parental brood year
     # (2) a known-origin pop did not receive any broodstock in a given year
@@ -165,6 +166,20 @@ stan_data <- function(stan_model = c("IPM_SS_np","IPM_SSiter_np","IPM_SS_pp","IP
     if(any(is.na(n_B_obs))) 
       stop("NA found in compositional data (n_B_obs). If an origin was not seen ",
            "in the broodstock or no broodstock was taken, the observed frequency is 0.")
+
+    # identify orphan hatchery cases: 
+    # some or all broodstock transfers are not included in fish_data 
+    which_B_pop <- as.numeric(gsub("n_B|_obs", "", names(n_B_obs)))
+    S_add = rep(0,N)
+    for(i in 1:N) {
+      for(j in 1:length(which_B_pop)) {
+        ij <- year == year[i] & pop == which_B_pop[j]
+        S_add[ij] <- S_add[ij] + n_B_obs[i,j]
+      }
+    }
+    is_orphan_H <- pop %in% which_H_pop & S_add < S_obs
+    
+    # construct conditional broodstock transfer probability matrices
     p_B_obs <- cbind(location = factor(fish_data$pop), year = year, 
                      sweep(n_B_obs, 1, pmax(B_take_obs, 1), "/"))
     p_B_obs <- pivot_longer(p_B_obs, cols = starts_with("n_B"), values_to = "p",
@@ -505,7 +520,7 @@ stan_data <- function(stan_model = c("IPM_SS_np","IPM_SSiter_np","IPM_SS_pp","IP
                   # smolt abundance
                   N_M_obs = sum(!is.na(M_obs)),
                   which_M_obs = as.vector(which(!is.na(M_obs))),
-                  M_obs = replace(M_obs, is.na(M_obs) | M_obs==0, 1),
+                  M_obs = replace(M_obs, is.na(M_obs) | M_obs == 0, 1),
                   prior_tau_M = prior_tau_M,
                   # smolt age structure
                   N_Mage = N_Mage,
@@ -517,7 +532,7 @@ stan_data <- function(stan_model = c("IPM_SS_np","IPM_SSiter_np","IPM_SS_pp","IP
                   # spawner abundance
                   N_S_obs = sum(!is.na(S_obs)),
                   which_S_obs = as.vector(which(!is.na(S_obs))),
-                  S_obs = replace(S_obs, is.na(S_obs) | S_obs==0, 1),
+                  S_obs = replace(S_obs, is.na(S_obs) | S_obs == 0, 1),
                   prior_tau_S = prior_tau_S,
                   # spawner ocean and Gilbert-Rich age structure
                   N_MSage =  N_MSage, 
@@ -611,6 +626,7 @@ stan_data <- function(stan_model = c("IPM_SS_np","IPM_SSiter_np","IPM_SS_pp","IP
                   age_F = age_F,
                   N_H_pop = length(which_H_pop),
                   which_H_pop = which_H_pop,
+                  is_orphan_H = is_orphan_H,
                   N_D_pop = length(which_D_pop),
                   which_D_pop = which_D_pop,
                   N_B = sum(B_take_obs > 0),
