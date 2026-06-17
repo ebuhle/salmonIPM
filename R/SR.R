@@ -147,7 +147,7 @@ SR <- function(SR_fun = c("BH","B-H","bh","b-h","Ricker","ricker","exp"),
     if(is.data.frame(get(i))) assign(i, as.matrix(get(i)))
   }
 
-  if(!is.null(alpha) & !is.null(Rmax)) { # relative reproductive success == 1
+  if(is.null(alpha_W) & is.null(Rmax_W)) { # relative reproductive success == 1
     R <- switch(
       SR_fun,
       exp = alpha*S,
