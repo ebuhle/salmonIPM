@@ -323,6 +323,8 @@ salmonIPM <- function(stan_model = paste(model, life_cycle, ifelse(pool_pops, "p
     .call[[n]] <- eval(.call[[n]])
   .call <- as.call(.call)
   
+  names(par_models) <- lapply(par_models, function(f) all.vars(f)[1]) # names are responses
+
   dat <- stan_data(stan_model = stan_model, SR_fun = SR_fun, RRS = RRS, ages = ages, 
                    par_models = par_models, center = center, scale = scale, priors = priors, 
                    fish_data = fish_data, age_F = age_F, age_B = age_B, 
