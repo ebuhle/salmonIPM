@@ -415,6 +415,8 @@ stan_init <- function(stan_model = c("IPM_SS_np","IPM_SSiter_np","IPM_SS_pp","IP
         # SAR
         mu_MS = plogis(rnorm(1, mean(qlogis(s_MS)), 0.5)),
         beta_MS = array(rnorm(K_MS, 0, 0.5/apply(abs(X_MS), 2, max))),
+        sigma_pop_MS = runif(1, 0.05, 2),
+        zeta_pop_MS = as.vector(tapply(scale(qlogis(s_MS)), pop, mean)),
         rho_MS = runif(1, 0.1, 0.7),
         sigma_year_MS = runif(1, 0.05, 2), 
         zeta_year_MS = as.vector(tapply(scale(qlogis(s_MS)), year, mean)),
