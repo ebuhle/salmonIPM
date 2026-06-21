@@ -58,7 +58,8 @@ summary.salmonIPMfit <- function(object, pars = "hyper", include = TRUE,
                                  probs = c(0.05, 0.50, 0.95), funs = list(),
                                  .cores = 1) 
 {
-  default_funs <- list(mean = mean, sd = sd, qnt = ~ quantile(.x, probs = probs), 
+  default_funs <- list(mean = mean, sd = sd, 
+                       qnt = ~ quantile(.x, probs = probs, na.rm = TRUE), 
                        ess_bulk = ess_bulk, rhat = rhat)
   funs <- if(length(funs)) funs else default_funs
   drf <- as_draws_df(object, pars = pars, include = include)
