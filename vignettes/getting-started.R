@@ -11,7 +11,7 @@ if(.Platform$OS.type == "windows") options(device = "windows")
 
 ## @knitr install
 if(!require("devtools")) install.packages("devtools")
-try(devtools::install_github("ebuhle/salmonIPM", auth_token = "my_PAT"))
+try(devtools::install_github("ebuhle/salmonIPM"))
 
 #------------------------------
 # Load packages
