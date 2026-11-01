@@ -349,7 +349,7 @@ model {
 generated quantities {
   vector[RRS[1]*N_pop] delta_alpha; // H vs. W discount in log intrinsic productivity
   vector[RRS[2]*N_pop] delta_Rmax;  // H vs. W discount in log maximum recruitment
-  array[N_pop] corr_matrix[N_age-1] R_p; // correlation matrices of within-pop cohort log-ratio age distns
+  array[N_pop] corr_matrix[N_age-1] R_p; // correlation matrices of cohort log-ratio age distns
   vector[N] LL_S_obs;               // pointwise log-likelihood of total spawners
   vector[N_H] LL_n_H_obs;           // pointwise log-likelihood of hatchery vs. wild frequencies
   vector[N] LL_n_age_obs;           // pointwise log-likelihood of wild spawner age age frequencies

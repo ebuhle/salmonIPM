@@ -191,8 +191,6 @@ parameters {
   // SAR
   real<lower=0,upper=1> mu_MS;           // hyper-mean SAR
   vector[K_MS] beta_MS;                  // regression coefs for annual logit SAR anomalies
-  real<lower=0> sigma_pop_MS;            // among-pop hyper-SD of logit SAR anomalies
-  vector[N_pop] zeta_pop_MS;             // among-pop logit SAR anomalies (Z-scores)
   real<lower=-1,upper=1> rho_MS;         // AR(1) coef of annual logit SAR anomalies
   real<lower=0> sigma_year_MS;           // innovation SD of annual logit SAR anomalies
   vector[N_year] zeta_year_MS;           // annual logit SAR anomalies (Z-scores)
@@ -325,8 +323,7 @@ transformed parameters {
   eta_year_M = eta_year_M - mean(eta_year_M);
   eta_year_MS = eta_year_MS - mean(eta_year_MS);
   // annual population-specific SAR
-  s_MS = inv_logit(logit(mu_MS) + mat_lmult(X_MS, beta_MS) + sigma_pop_MS * zeta_pop_MS[pop] + 
-                   eta_year_MS[year] + sigma_MS * zeta_M);
+  s_MS = inv_logit(logit(mu_MS) + mat_lmult(X_MS, beta_MS) + eta_year_MS[year] + sigma_MS * zeta_M);
   
   // Multivariate Matt trick for age vectors (pop-specific mean and within-pop, time-varying)
   mu_alr_p = to_row_vector(log(head(mu_p, N_age - 1)) - log(mu_p[N_age]));
@@ -339,7 +336,7 @@ transformed parameters {
   }
   
   // Annual population-specific proportion females
-  p_F = inv_logit(logit(mu_F) + sigma_pop_F*zeta_pop_F[pop] + sigma_F * zeta_F);
+  p_F = inv_logit(logit(mu_F) + sigma_pop_F * zeta_pop_F[pop] + sigma_F * zeta_F);
   
   // Pad straying matrix
   for(j in 1:N_O_pop) P_D[which_D_pop,which_O_pop[j]] = p_D[j];
@@ -508,8 +505,6 @@ model {
   // SAR
   mu_MS ~ beta(prior_mu_MS[1], prior_mu_MS[2]);
   beta_MS ~ normal(0,3);
-  sigma_pop_MS ~ normal(0,2);
-  zeta_pop_MS ~ std_normal();  // eta_pop_MS ~ N(0, sigma_pop_MS)
   rho_MS ~ gnormal(0,0.85,20); // regularize away from 1 to ensure stationarity
   sigma_year_MS ~ normal(0,2);
   zeta_year_MS ~ std_normal(); // eta_year_MS[i] ~ N(rho_MS*eta_year_MS[i-1], sigma_year_MS)
@@ -575,7 +570,6 @@ generated quantities {
   vector[RRS[1]*N_pop] delta_psi;  // H vs. W discount in logit density-independent egg-smolt survival
   real delta_mu_Mmax;           // H vs. W discount in hyper-mean log maximum smolt recruitment
   vector[RRS[2]*N_pop] delta_Mmax; // H vs. W discount in log maximum smolt recruitment
-  vector[N_pop] mu_pop_MS;      // population mean SAR
   matrix[N_pop,N_age] mu_pop_p; // population mean age distributions
   corr_matrix[N_age-1] R_pop_p; // among-pop correlation matrix of mean log-ratio age distns 
   corr_matrix[N_age-1] R_p;     // correlation matrix of within-pop cohort log-ratio age distns 
@@ -597,9 +591,6 @@ generated quantities {
   delta_psi = logit(psi_H) - logit(psi_W);
   delta_mu_Mmax = mu_Mmax_H - mu_Mmax_W;
   delta_Mmax = log(Mmax_H) - log(Mmax_W);
-  
-  // Population mean SAR
-  mu_pop_MS = inv_logit(logit(mu_MS) + sigma_pop_MS * zeta_pop_MS);
   
   // Population mean age distributions
   {

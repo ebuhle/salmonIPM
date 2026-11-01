@@ -156,9 +156,11 @@ get_prior_info <- function(stan_data, stanmodel, pars)
       ub <- ifelse(length(ub), as.numeric(ub), NA)
       bounds <- c(lb = lb, ub = ub)
       not_NA <- sum(!is.na(bounds))
-      if(!is.null(user_priors[[.par]]) && not_NA && user_priors[[.par]]$dist != "lognormal") {
+      if(!is.null(user_priors[[.par]]) && not_NA && 
+         !user_priors[[.par]]$dist %in% c("lognormal", "beta")) {
         attr(user_priors[[.par]], "bounds") <- bounds
-      } else if(!is.null(hard_priors[[.par]]) && not_NA && hard_priors[[.par]]$dist != "lognormal") {
+      } else if(!is.null(hard_priors[[.par]]) && not_NA && 
+                !hard_priors[[.par]]$dist %in% c("lognormal", "beta")) {
         attr(hard_priors[[.par]], "bounds") <- bounds
       } else if(not_NA == 2) {
         bounded_priors[[.par]] <- structure(do.call(uniform, as.list(bounds)), type = "bounded")

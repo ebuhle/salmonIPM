@@ -323,7 +323,8 @@ salmonIPM <- function(stan_model = paste(model, life_cycle, ifelse(pool_pops, "p
     .call[[n]] <- eval(.call[[n]])
   .call <- as.call(.call)
   
-  names(par_models) <- lapply(par_models, function(f) all.vars(f)[1]) # names are responses
+  if(!is.null(par_models))
+    names(par_models) <- lapply(par_models, function(f) all.vars(f)[1]) # names are responses
 
   dat <- stan_data(stan_model = stan_model, SR_fun = SR_fun, RRS = RRS, ages = ages, 
                    par_models = par_models, center = center, scale = scale, priors = priors, 
@@ -350,9 +351,9 @@ salmonIPM <- function(stan_model = paste(model, life_cycle, ifelse(pool_pops, "p
   
   # Replace placeholder state values with NA when hatchery S_obs is structurally 0   
   if(stanmodel == "IPM_LCRchum_pp") {
-    NA_samples <- rep(NA, stanfit@sim$iter)
-    for(m in 1:stanfit@sim$chains) {
-      for(i in which(dd$pop %in% dd$which_H_pop & fish_data$S_obs == 0)) {
+    NA_samples <- rep(NA, iter)
+    for(m in 1:chains) {
+      for(i in which(dat$pop %in% dat$which_H_pop & fish_data$S_obs == 0)) {
         for(a in 1:dat$N_age)
           stanfit@sim$samples[[m]][[paste0("q[", i, ",", a, "]")]] <- NA_samples
         for(j in 1:(dat$N_O_pop + 1))
